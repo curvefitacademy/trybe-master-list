@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trybe Brand Master List</title>
+<meta name="description" content="Every brand on Trybe, ranked by what they pay creators. Updated weekly.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@700;800;900&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Loading -->
+<div id="v-loading" class="view center-card"><div class="spinner" role="status" aria-label="Loading"></div></div>
+
+<!-- Log in / sign up / reset -->
+<section id="v-auth" class="view" hidden>
+  <div id="login">
+    <div class="login-card">
+      <div class="logo">The Trybe Brand<br><span>Master List</span></div>
+      <p>Every brand on Trybe, ranked by what they pay creators. Updated weekly.</p>
+      <div class="auth-switch" role="tablist">
+        <button type="button" role="tab" id="sw-login" aria-selected="true">Log in</button>
+        <button type="button" role="tab" id="sw-signup" aria-selected="false">Create account</button>
+      </div>
+
+      <form id="f-login" class="field" novalidate style="gap:14px">
+        <div class="field"><label for="li-email">Email</label><input id="li-email" type="email" autocomplete="email" required></div>
+        <div class="field"><label for="li-pw">Password</label><input id="li-pw" type="password" autocomplete="current-password" required></div>
+        <button class="btn" type="submit">Log in</button>
+        <div class="small"><a href="#" id="go-forgot">Forgot password?</a></div>
+      </form>
+
+      <form id="f-signup" class="field" novalidate style="gap:14px" hidden>
+        <p class="small" style="margin:0">Use the same email you bought with (or the one your community gave access to).</p>
+        <div class="field"><label for="su-email">Email</label><input id="su-email" type="email" autocomplete="email" required></div>
+        <div class="field"><label for="su-pw">Create a password</label><input id="su-pw" type="password" autocomplete="new-password" minlength="8" required></div>
+        <button class="btn" type="submit">Create account</button>
+      </form>
+
+      <form id="f-forgot" class="field" novalidate style="gap:14px" hidden>
+        <p class="small" style="margin:0">Enter your email and we'll send you a link to set a new password.</p>
+        <div class="field"><label for="fp-email">Email</label><input id="fp-email" type="email" autocomplete="email" required></div>
+        <button class="btn" type="submit">Send reset link</button>
+        <div class="small"><a href="#" id="back-login">Back to log in</a></div>
+      </form>
+
+      <form id="f-reset" class="field" novalidate style="gap:14px" hidden>
+        <p class="small" style="margin:0">Choose a new password for your account.</p>
+        <div class="field"><label for="rp-pw">New password</label><input id="rp-pw" type="password" autocomplete="new-password" minlength="8" required></div>
+        <button class="btn" type="submit">Save new password</button>
+      </form>
+
+      <div id="auth-msg" class="msg" hidden></div>
+      <a id="buy-link" class="buy" href="#" target="_blank" rel="noopener" hidden>Don't have access yet? Get the Master List</a>
+      <div class="small">Questions? <span class="email" id="contact1"></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Logged in but not an active member -->
+<section id="v-noaccess" class="view center-card" hidden>
+  <div class="login-card">
+    <div class="logo">The Trybe Brand<br><span>Master List</span></div>
+    <h2>Your account isn't active</h2>
+    <p>You're logged in as <b id="na-email"></b>, but that email isn't on the member list (or the subscription has ended).</p>
+    <p>If you bought with a different email, log out and use that one. Otherwise, email <span class="email" id="contact2"></span> and we'll sort it out.</p>
+    <a id="buy-link2" class="buy" href="#" target="_blank" rel="noopener" hidden>Get the Master List</a>
+    <button class="btn ghost" type="button" id="na-logout">Log out</button>
+  </div>
+</section>
+
+<!-- Member app -->
+<div id="v-app" class="view" hidden>
+  <header class="bar"><div class="bar-in">
+    <div class="logo">Trybe Brand <span>Master List</span></div>
+    <div class="bar-meta">
+      <span class="updated" id="updated">Updated weekly</span>
+      <span id="who"></span>
+      <a class="linkbtn" id="manage-link" href="#" target="_blank" rel="noopener" hidden style="text-decoration:none">Manage subscription</a>
+      <button class="linkbtn" id="logout" type="button">Log out</button>
+    </div>
+  </div></header>
+  <nav class="tabs" aria-label="Sections"><div class="tabs-in" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-tab="dir" id="t-dir">Brand Directory</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="picks" id="t-picks">Top Picks</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="new" id="t-new">What's New</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="help" id="t-help">How to Use</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="admin" id="t-admin" hidden>Admin</button>
+  </div></nav>
+  <main>
+    <section id="p-dir" role="tabpanel" aria-labelledby="t-dir">
+      <h1>Brand Directory</h1>
+      <div class="stats" id="stats"></div>
+      <div class="filters">
+        <div class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Search brands or categories" aria-label="Search brands or categories"></div>
+        <select id="cat" aria-label="Category"><option value="">All categories</option></select>
+        <select id="earnF" aria-label="Creator earnings">
+          <option value="">Any earnings</option><option value="100000">$100K+ paid</option><option value="10000">$10K+ paid</option><option value="1000">$1K+ paid</option><option value="0">New programs only</option>
+        </select>
+        <label class="toggle"><input type="checkbox" id="ttsF"> On TikTok Shop</label>
+        <label class="toggle"><input type="checkbox" id="noApps"> Hide apps</label>
+        <label class="toggle"><input type="checkbox" id="noCap"> No per-video cap</label>
+      </div>
+      <div class="toolbar"><div class="count" id="count" style="margin:0"></div><button class="btn ghost sm" type="button" id="csvBtn">Download this view (CSV)</button></div>
+      <div class="tablewrap"><table aria-describedby="count">
+        <thead><tr id="head"></tr></thead>
+        <tbody id="body"></tbody>
+      </table></div>
+      <div class="more"><button class="btn ghost" id="moreBtn" type="button">Show 100 more</button></div>
+    </section>
+
+    <section id="p-picks" role="tabpanel" aria-labelledby="t-picks" hidden>
+      <h1>Top Picks</h1>
+      <div class="picks" id="picks"></div>
+    </section>
+
+    <section id="p-new" role="tabpanel" aria-labelledby="t-new" hidden>
+      <h1>What's New This Week</h1>
+      <div class="note" id="whatsnew"></div>
+    </section>
+
+    <section id="p-help" role="tabpanel" aria-labelledby="t-help" hidden>
+      <h1>How to Use</h1>
+      <div class="note">
+        <div class="help-grid">
+          <div><b>Sort</b><span>Click any column header. Click again to flip the order.</span></div>
+          <div><b>Find quiet programs</b><span>Sort by Earnings / Creator. High payouts split among few creators.</span></div>
+          <div><b>Double-dip</b><span>Turn on "On TikTok Shop" to find brands you can also promote as a TikTok Shop affiliate.</span></div>
+          <div><b>Red commission</b><span>That program caps how much one video can earn.</span></div>
+          <div><b>Trybe Score</b><span>Trybe's 0–100 reliability score. Green 80+, plain 40–79, red under 40.</span></div>
+          <div><b>Take it with you</b><span>"Download this view (CSV)" saves exactly what you've filtered, for Excel or Google Sheets.</span></div>
+          <div><b>Join a brand</b><span>Open the Trybe app → Discover Brands → search the name → Request to Join.</span></div>
+        </div>
+        <p class="small">Figures come from Trybe and are rounded ("$450K+"). Always confirm current terms in the Trybe app. Not affiliated with Trybe or TikTok.</p>
+        <p>Questions? Email <span class="email" id="contact3"></span></p>
+      </div>
+    </section>
+
+    <section id="p-admin" role="tabpanel" aria-labelledby="t-admin" hidden>
+      <h1>Admin</h1>
+      <div class="admin-grid">
+        <div class="panel">
+          <h2>Weekly update</h2>
+          <p class="small" style="margin:0">Upload the weekly data file (the <b>.json</b> Claude gives you). It goes live for every member right away.</p>
+          <div class="row"><input type="file" id="dataFile" accept=".json,application/json"><button class="btn sm" type="button" id="uploadBtn">Publish update</button></div>
+          <div id="upMsg" class="msg" hidden></div>
+          <p class="small" style="margin:0" id="dataStatus"></p>
+        </div>
+
+        <div class="panel">
+          <h2>Add members</h2>
+          <p class="small" style="margin:0">Paste one or many emails (one per line, or separated by commas). Stripe buyers are added automatically. Use this for Stan buyers and communities.</p>
+          <textarea id="addEmails" aria-label="Emails to add" placeholder="name@example.com&#10;other@example.com"></textarea>
+          <div class="row">
+            <label for="addSource" class="small">Where they're from</label>
+            <select id="addSource"><option value="manual">Manual</option><option value="stan">Stan</option><option value="community">Community</option></select>
+            <button class="btn sm" type="button" id="addBtn">Add members</button>
+          </div>
+          <div id="addMsg" class="msg" hidden></div>
+        </div>
+
+        <div class="panel">
+          <div class="toolbar" style="margin:0"><h2>Members</h2><span class="small" id="memCount"></span></div>
+          <div class="row">
+            <input type="search" id="memQ" placeholder="Search email" aria-label="Search members">
+            <select id="memStatus" aria-label="Filter by status"><option value="">All</option><option value="active">Active</option><option value="canceled">Canceled</option></select>
+            <select id="memSource" aria-label="Filter by source"><option value="">Any source</option><option value="stripe">Stripe</option><option value="stan">Stan</option><option value="community">Community</option><option value="manual">Manual</option></select>
+            <button class="btn ghost sm" type="button" id="memRefresh">Refresh</button>
+          </div>
+          <div class="tablewrap"><table class="mtable"><thead><tr><th>Email</th><th>Status</th><th>Source</th><th>Added</th><th></th></tr></thead><tbody id="memBody"></tbody></table></div>
+          <div id="memMsg" class="msg" hidden></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
