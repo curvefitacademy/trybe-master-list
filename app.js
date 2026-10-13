@@ -100,6 +100,22 @@
     if (data.session) enter(data.session);
   });
 
+  // After Stripe checkout, look up the exact email they paid with (Apple Pay / Link can use a different one).
+  async function prefillCheckoutEmail() {
+    const sid = (location.search.match(/[?&]session_id=([^&]+)/) || [])[1];
+    if (!sid) return;
+    try {
+      const r = await fetch('/api/checkout-email?session_id=' + encodeURIComponent(sid), { cache: 'no-store' });
+      const j = await r.json();
+      if (j.email) {
+        $('su-email').value = j.email; $('su-email').readOnly = true;
+        $('li-email').value = j.email;
+        $('welcome').innerHTML = 'Payment received, welcome! Your account email is <b>' + esc(j.email) + '</b> (the one you paid with). Just choose a password below.';
+        $('su-pw').focus();
+      }
+    } catch (e) { /* fall back to typing it */ }
+  }
+
   async function logout() { await sb.auth.signOut(); DATA = null; show('v-auth'); authForm('login'); }
   $('logout').onclick = logout; $('na-logout').onclick = logout;
 
@@ -114,7 +130,7 @@
   (async () => {
     const { data } = await sb.auth.getSession();
     if (recovering) return;
-    if (data.session) { if (entered !== data.session.user.id) enter(data.session); } else { show('v-auth'); authForm(WELCOME ? 'signup' : 'login'); if (WELCOME) $('welcome').hidden = false; }
+    if (data.session) { if (entered !== data.session.user.id) enter(data.session); } else { show('v-auth'); authForm(WELCOME ? 'signup' : 'login'); if (WELCOME) { $('welcome').hidden = false; prefillCheckoutEmail(); } }
   })();
 
   // ------------------------------------------------------------------ load data
