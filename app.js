@@ -115,12 +115,21 @@
     show('v-loading');
     const email = (session.user.email || '').toLowerCase();
     const [meta, adm] = await Promise.all([
-      sb.from('site_meta').select('key,value').in('key', ['brands', 'info']),
+      sb.from('site_meta').select('key,value').eq('key', 'info'),
       sb.from('admins').select('email').limit(1),
     ]);
     IS_ADMIN = !adm.error && adm.data && adm.data.length > 0;
     if (meta.error) { show('v-auth'); authMsg('err', 'Could not load the list: ' + meta.error.message); return; }
-    const rows = Object.fromEntries((meta.data || []).map((r) => [r.key, r.value]));
+    const rows = {};
+    const info = meta.data && meta.data[0] && meta.data[0].value;
+    if (info && info.version && info.parts) {
+      const keys = Array.from({ length: info.parts }, (_, i) => 'b_' + info.version + '_' + i);
+      const parts = await sb.from('site_meta').select('key,value').in('key', keys);
+      if (parts.error) { show('v-auth'); authMsg('err', 'Could not load the list: ' + parts.error.message); return; }
+      const byKey = Object.fromEntries((parts.data || []).map((r) => [r.key, r.value]));
+      rows.brands = keys.flatMap((k) => byKey[k] || []);
+      rows.info = info;
+    }
     if (!rows.brands && !IS_ADMIN) {
       // RLS hides everything from non-members. Check their own membership row for a clearer message.
       $('na-email').textContent = email; show('v-noaccess'); return;
@@ -241,6 +250,25 @@
   // ------------------------------------------------------------------ admin
   function panelMsg(id, kind, text) { const m = $(id); if (!text) { m.hidden = true; return; } m.className = 'msg ' + kind; m.textContent = text; m.hidden = false; }
 
+  // Saves the list in ~100 KB parts, then switches members over to the new version in one step.
+  async function publishBrands(brands, info, progress) {
+    const PART = 600, version = Date.now().toString(36), parts = Math.ceil(brands.length / PART);
+    for (let i = 0; i < parts; i++) {
+      if (progress) progress(i + 1, parts);
+      const { error } = await sb.from('site_meta').upsert({ key: 'b_' + version + '_' + i, value: brands.slice(i * PART, (i + 1) * PART) }, { onConflict: 'key' });
+      if (error) return { error: error.message };
+    }
+    const newInfo = Object.assign({}, info, { version, parts, count: brands.length, published_at: new Date().toISOString() });
+    const { error } = await sb.from('site_meta').upsert({ key: 'info', value: newInfo }, { onConflict: 'key' });
+    if (error) return { error: error.message };
+    // Clean up older versions
+    const keep = Array.from({ length: parts }, (_, i) => 'b_' + version + '_' + i);
+    await sb.from('site_meta').delete().like('key', 'b_%').not('key', 'in', '(' + keep.join(',') + ')');
+    await sb.from('site_meta').delete().eq('key', 'brands');
+    return { info: newInfo };
+  }
+  window.__tbmlPublish = publishBrands;
+
   $('uploadBtn').onclick = async () => {
     panelMsg('upMsg');
     const file = $('dataFile').files[0];
@@ -249,12 +277,11 @@
     try { payload = JSON.parse(await file.text()); } catch (e) { return panelMsg('upMsg', 'err', 'That file isn\'t valid JSON. Make sure it\'s the .json file from Claude.'); }
     const brands = payload.brands, info = payload.info || {};
     if (!Array.isArray(brands) || brands.length < 100 || !Array.isArray(brands[0])) return panelMsg('upMsg', 'err', 'That file doesn\'t look like a brand list (expected thousands of brands).');
-    $('uploadBtn').disabled = true; panelMsg('upMsg', 'ok', 'Publishing ' + n(brands.length) + ' brands…');
-    const now = new Date().toISOString();
-    const { error } = await sb.from('site_meta').upsert([{ key: 'brands', value: brands }, { key: 'info', value: Object.assign({}, info, { published_at: now }) }], { onConflict: 'key' });
+    $('uploadBtn').disabled = true;
+    const result = await publishBrands(brands, info, (done, total) => panelMsg('upMsg', 'ok', `Publishing ${n(brands.length)} brands… part ${done} of ${total}`));
     $('uploadBtn').disabled = false;
-    if (error) return panelMsg('upMsg', 'err', 'Upload failed: ' + error.message);
-    INFO = Object.assign({}, info, { published_at: now }); setData(brands);
+    if (result.error) return panelMsg('upMsg', 'err', 'Upload failed: ' + result.error);
+    INFO = result.info; setData(brands);
     panelMsg('upMsg', 'ok', 'Published! ' + n(brands.length) + ' brands are live for all members.');
     dataStatus();
   };
