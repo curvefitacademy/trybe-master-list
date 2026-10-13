@@ -135,6 +135,7 @@
       $('na-email').textContent = email; show('v-noaccess'); return;
     }
     INFO = rows.info || {};
+    await loadFavs(email);
     setData(rows.brands);
     $('who').textContent = email;
     $('t-admin').hidden = !IS_ADMIN;
@@ -171,7 +172,7 @@
   const COLS = [['brand', 'Brand', 0], ['tts', 'TikTok Shop', 0], ['comm', 'Commission', 0], ['earn', 'Creator Earnings', 1], ['cr', 'Creators', 1], ['epc', 'Earnings / Creator', 1], ['s30', 'Videos (30d)', 1], ['score', 'Trybe Score', 1], ['rating', 'Rating', 1], ['cat', 'Categories', 0]];
   let sortKey = 'earn', dir = -1, limit = 100;
   function head() {
-    $('head').innerHTML = COLS.map(([k, l, num]) => `<th class="${num ? 'num' : ''} ${k === sortKey ? 'sorted' : ''}" aria-sort="${k === sortKey ? (dir < 0 ? 'descending' : 'ascending') : 'none'}"><button type="button" data-k="${k}">${l}${k === sortKey ? (dir < 0 ? ' ↓' : ' ↑') : ''}</button></th>`).join('');
+    $('head').innerHTML = '<th class="starcell"><span class="sr-only" hidden>Favorite</span></th>' + COLS.map(([k, l, num]) => `<th class="${num ? 'num' : ''} ${k === sortKey ? 'sorted' : ''}" aria-sort="${k === sortKey ? (dir < 0 ? 'descending' : 'ascending') : 'none'}"><button type="button" data-k="${k}">${l}${k === sortKey ? (dir < 0 ? ' ↓' : ' ↑') : ''}</button></th>`).join('');
     $('head').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.k; if (k === sortKey) dir = -dir; else { sortKey = k; dir = COLS.find((c) => c[0] === k)[2] ? -1 : 1; } limit = 100; render(); }));
   }
   function filtered() {
@@ -190,9 +191,14 @@
     head();
     const rows = filtered().sort(cmp);
     $('count').innerHTML = `Showing <b>${n(Math.min(limit, rows.length))}</b> of <b>${n(rows.length)}</b> brands`;
-    $('body').innerHTML = rows.slice(0, limit).map((d) => {
+    $('body').innerHTML = rows.slice(0, limit).map(rowHtml).join('') || `<tr><td colspan="11" style="padding:28px;text-align:center;color:var(--muted)">No brands match those filters.</td></tr>`;
+    $('moreBtn').hidden = rows.length <= limit;
+  }
+  function rowHtml(d) {
       const site = d.site.replace(/^https?:\/\//, '');
+      const on = FAV.has(d.brand);
       return `<tr>
+      <td class="starcell"><button type="button" class="star" data-fav="${esc(d.brand)}" aria-pressed="${on}" aria-label="${on ? 'Remove from favorites' : 'Add to favorites'}">${on ? '★' : '☆'}</button></td>
       <td class="brand">${esc(d.brand)}${site ? `<a href="https://${esc(site)}" target="_blank" rel="noopener">${esc(site.replace(/^www\./, '').split('/')[0])}</a>` : ''}</td>
       <td><span class="pill p-${esc(d.tts)}">${TTS[d.tts] || 'Not verified'}</span></td>
       <td class="comm">${d.cap ? `<span class="cap">${esc(d.comm)}</span>` : esc(d.comm)}</td>
@@ -203,9 +209,38 @@
       <td class="num">${d.score != null ? `<span class="score ${scoreCls(d.score)}">${d.score}</span>` : dash}</td>
       <td class="num">${d.rating ? Number(d.rating).toFixed(1) + ` <span class="small">(${n(d.rev)})</span>` : dash}</td>
       <td class="cat">${esc(d.cat)}</td></tr>`;
-    }).join('') || `<tr><td colspan="10" style="padding:28px;text-align:center;color:var(--muted)">No brands match those filters.</td></tr>`;
-    $('moreBtn').hidden = rows.length <= limit;
   }
+
+  // ------------------------------------------------------------------ favorites
+  let FAV = new Set(), ME = '';
+  async function loadFavs(email) {
+    ME = email; FAV = new Set();
+    const { data, error } = await sb.from('favorites').select('brand');
+    if (!error && data) data.forEach((r) => FAV.add(r.brand));
+    favCount();
+  }
+  function favCount() { $('favCount').textContent = FAV.size ? FAV.size : ''; }
+  async function toggleFav(brand, btn) {
+    const on = !FAV.has(brand);
+    on ? FAV.add(brand) : FAV.delete(brand);
+    document.querySelectorAll('button.star').forEach((b) => { if (b.dataset.fav === brand) { b.setAttribute('aria-pressed', on); b.textContent = on ? '★' : '☆'; b.setAttribute('aria-label', on ? 'Remove from favorites' : 'Add to favorites'); } });
+    favCount();
+    const req = on ? sb.from('favorites').insert({ email: ME, brand }) : sb.from('favorites').delete().eq('email', ME).eq('brand', brand);
+    const { error } = await req;
+    if (error && !/duplicate/i.test(error.message)) {
+      on ? FAV.delete(brand) : FAV.add(brand); favCount(); renderFavs(); render();
+      alertBar('Could not save that favorite. Please try again.');
+    }
+    if (!$('p-fav').hidden) renderFavs();
+  }
+  function alertBar(t) { const m = $('count'); m.textContent = t; }
+  function renderFavs() {
+    const list = D.filter((d) => FAV.has(d.brand)).sort((a, b) => (b.earn || 0) - (a.earn || 0));
+    $('favEmpty').hidden = list.length > 0; $('favWrap').hidden = list.length === 0;
+    $('favHead').innerHTML = '<th class="starcell"></th>' + COLS.map(([k, l, num]) => `<th class="${num ? 'num' : ''}">${l}</th>`).join('');
+    $('favBody').innerHTML = list.map(rowHtml).join('');
+  }
+  document.addEventListener('click', (e) => { const b = e.target.closest('button.star'); if (b) toggleFav(b.dataset.fav, b); });
   ['q', 'cat', 'earnF', 'ttsF', 'noApps', 'noCap'].forEach((id) => $(id).addEventListener('input', () => { limit = 100; render(); }));
   $('moreBtn').onclick = () => { limit += 100; render(); };
 
@@ -242,8 +277,9 @@
   // ------------------------------------------------------------------ tabs
   function selectTab(k) {
     document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', x.dataset.tab === k));
-    ['dir', 'picks', 'new', 'help', 'admin'].forEach((t) => ($('p-' + t).hidden = t !== k));
+    ['dir', 'picks', 'fav', 'new', 'help', 'admin'].forEach((t) => ($('p-' + t).hidden = t !== k));
     if (k === 'admin') loadMembers();
+    if (k === 'fav') renderFavs();
   }
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => selectTab(t.dataset.tab)));
 

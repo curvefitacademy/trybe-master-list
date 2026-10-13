@@ -85,6 +85,7 @@
   <nav class="tabs" aria-label="Sections"><div class="tabs-in" role="tablist">
     <button class="tab" role="tab" aria-selected="true" data-tab="dir" id="t-dir">Brand Directory</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="picks" id="t-picks">Top Picks</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="fav" id="t-fav">★ Favorites <span class="fav-count" id="favCount"></span></button>
     <button class="tab" role="tab" aria-selected="false" data-tab="new" id="t-new">What's New</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="help" id="t-help">How to Use</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="admin" id="t-admin" hidden>Admin</button>
@@ -114,6 +115,15 @@
     <section id="p-picks" role="tabpanel" aria-labelledby="t-picks" hidden>
       <h1>Top Picks</h1>
       <div class="picks" id="picks"></div>
+    </section>
+
+    <section id="p-fav" role="tabpanel" aria-labelledby="t-fav" hidden>
+      <h1>Favorites</h1>
+      <p class="small" id="favEmpty">Tap the ☆ next to any brand in the Brand Directory to save it here. Your favorites stay saved to your account.</p>
+      <div class="tablewrap" id="favWrap" hidden><table>
+        <thead><tr id="favHead"></tr></thead>
+        <tbody id="favBody"></tbody>
+      </table></div>
     </section>
 
     <section id="p-new" role="tabpanel" aria-labelledby="t-new" hidden>
