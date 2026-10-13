@@ -16,10 +16,26 @@
 
 <!-- Log in / sign up / reset -->
 <section id="v-auth" class="view" hidden>
-  <div id="login">
+  <div id="login" class="landing">
+    <div class="pitch">
+      <div class="eyebrow">For UGC &amp; TikTok Shop creators</div>
+      <h1 class="pitch-h">Every brand on Trybe, ranked by what they <span>actually pay creators</span>.</h1>
+      <ul class="pitch-list">
+        <li><b>6,300+ brands</b>, updated every week</li>
+        <li><b>Creator earnings, creator counts</b> and earnings per creator, so you find the high-paying programs that aren't crowded yet</li>
+        <li><b>TikTok Shop status</b>, so you can double-dip as an affiliate</li>
+        <li><b>What's New</b> each week, plus Favorites to save the brands you're pitching</li>
+      </ul>
+      <div class="price-box" id="priceBox" hidden>
+        <div class="price"><b>$9.99</b>/month</div>
+        <div class="small">Cancel anytime. Instant access.</div>
+        <a id="buy-main" class="buy" href="#" target="_blank" rel="noopener">Get the Master List</a>
+      </div>
+    </div>
     <div class="login-card">
       <div class="logo">The Trybe Brand<br><span>Master List</span></div>
       <p>Every brand on Trybe, ranked by what they pay creators. Updated weekly.</p>
+      <div id="welcome" class="msg ok" hidden>Payment received, welcome! Create your account below using the <b>same email you used at checkout</b>.</div>
       <div class="auth-switch" role="tablist">
         <button type="button" role="tab" id="sw-login" aria-selected="true">Log in</button>
         <button type="button" role="tab" id="sw-signup" aria-selected="false">Create account</button>
@@ -53,7 +69,6 @@
       </form>
 
       <div id="auth-msg" class="msg" hidden></div>
-      <a id="buy-link" class="buy" href="#" target="_blank" rel="noopener" hidden>Don't have access yet? Get the Master List</a>
       <div class="small">Questions? <span class="email" id="contact1"></span></div>
     </div>
   </div>

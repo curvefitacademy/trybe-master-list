@@ -7,7 +7,8 @@
   const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 
   ['contact1', 'contact2', 'contact3'].forEach((id) => { if ($(id)) $(id).textContent = C.CONTACT_EMAIL || ''; });
-  if (C.BUY_URL) { ['buy-link', 'buy-link2'].forEach((id) => { $(id).href = C.BUY_URL; $(id).hidden = false; }); }
+  if (C.BUY_URL) { ['buy-main', 'buy-link2'].forEach((id) => { $(id).href = C.BUY_URL; $(id).hidden = false; }); $('priceBox').hidden = false; }
+  const WELCOME = /[?&]welcome=1/.test(location.search);
   if (C.MANAGE_URL) { $('manage-link').href = C.MANAGE_URL; $('manage-link').hidden = false; }
 
   function show(view) { ['v-loading', 'v-auth', 'v-noaccess', 'v-app'].forEach((v) => ($(v).hidden = v !== view)); }
@@ -57,7 +58,15 @@
     busy(f, true);
     const { data: allowed, error: rpcErr } = await sb.rpc('can_sign_up', { check_email: email });
     if (rpcErr) { busy(f, false); return authMsg('err', 'Could not check your email right now (' + rpcErr.message + '). Please try again.'); }
-    if (!allowed) { busy(f, false); return authMsg('err', 'That email isn\'t on the member list yet. Use the email you bought with. Just bought? Wait a minute and try again. Still stuck? Email ' + (C.CONTACT_EMAIL || '') + '.'); }
+    let ok = allowed;
+    // Right after checkout, Stripe can take a few seconds to confirm. Wait up to ~30 seconds.
+    for (let i = 0; !ok && WELCOME && i < 10; i++) {
+      authMsg('ok', 'Confirming your payment… (' + (i + 1) + ')');
+      await new Promise((r) => setTimeout(r, 3000));
+      const again = await sb.rpc('can_sign_up', { check_email: email });
+      ok = !again.error && again.data;
+    }
+    if (!ok) { busy(f, false); return authMsg('err', 'That email isn\'t on the member list yet. Use the exact email you entered at checkout. Still stuck? Email ' + (C.CONTACT_EMAIL || '') + '.'); }
     const { data, error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin } });
     busy(f, false);
     if (error) {
@@ -105,7 +114,7 @@
   (async () => {
     const { data } = await sb.auth.getSession();
     if (recovering) return;
-    if (data.session) { if (entered !== data.session.user.id) enter(data.session); } else { show('v-auth'); authForm('login'); }
+    if (data.session) { if (entered !== data.session.user.id) enter(data.session); } else { show('v-auth'); authForm(WELCOME ? 'signup' : 'login'); if (WELCOME) $('welcome').hidden = false; }
   })();
 
   // ------------------------------------------------------------------ load data
