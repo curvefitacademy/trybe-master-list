@@ -239,17 +239,35 @@
   }
 
   // ------------------------------------------------------------------ favorites
-  let FAV = new Set(), ME = '';
+  // Brand favorites are stored by brand name. Video favorites share the same table: brand = 'v:' + JSON [id, brand, creator, username, thumb, video].
+  let FAV = new Set(), FAVV = new Map(), SAVED = new Map(), ME = '';
   async function loadFavs(email) {
-    ME = email; FAV = new Set();
-    const { data, error } = await sb.from('favorites').select('brand');
-    if (!error && data) data.forEach((r) => FAV.add(r.brand));
+    ME = email; FAV = new Set(); FAVV = new Map(); SAVED = new Map();
+    const { data, error } = await sb.from('favorites').select('brand,created_at');
+    if (!error && data) data.forEach((r) => {
+      if (r.brand.startsWith('v:')) { try { const a = JSON.parse(r.brand.slice(2)); FAVV.set(a[0], { raw: r.brand, a, at: r.created_at || '' }); } catch (e) {} }
+      else { FAV.add(r.brand); SAVED.set(r.brand, r.created_at || ''); }
+    });
     favCount();
   }
-  function favCount() { $('favCount').textContent = FAV.size ? FAV.size : ''; }
+  function favCount() { const t = FAV.size + FAVV.size; $('favCount').textContent = t ? t : ''; }
+  const vRaw = (x) => 'v:' + JSON.stringify([x.id, x.brand, x.creator, x.user, x.thumb, x.video]);
+  function vStarHtml(id) { const on = FAVV.has(id); return `<button type="button" class="vstar" data-vid="${esc(id)}" aria-pressed="${on}">${on ? '★ Saved' : '☆ Save'}</button>`; }
+  async function toggleVid(id) {
+    const cur = FAVV.get(id); const on = !cur; let raw;
+    if (on) {
+      const x = TOPV.find((v) => v.id === id) || [...FAVV.values()].map((f) => f.x).find((v) => v && v.id === id);
+      if (!x) return; raw = vRaw(x); FAVV.set(id, { raw, a: JSON.parse(raw.slice(2)), at: new Date().toISOString() });
+    } else { raw = cur.raw; FAVV.delete(id); }
+    const sync = () => document.querySelectorAll('button.vstar').forEach((b) => { if (b.dataset.vid === id) b.outerHTML = vStarHtml(id); });
+    sync(); favCount();
+    const { error } = await (on ? sb.from('favorites').insert({ email: ME, brand: raw }) : sb.from('favorites').delete().eq('email', ME).eq('brand', raw));
+    if (error && !/duplicate/i.test(error.message)) { on ? FAVV.delete(id) : FAVV.set(id, cur); sync(); favCount(); }
+    if (!$('p-fav').hidden) renderFavs();
+  }
   async function toggleFav(brand, btn) {
     const on = !FAV.has(brand);
-    on ? FAV.add(brand) : FAV.delete(brand);
+    on ? (FAV.add(brand), SAVED.set(brand, new Date().toISOString())) : FAV.delete(brand);
     document.querySelectorAll('button.star').forEach((b) => { if (b.dataset.fav === brand) { b.setAttribute('aria-pressed', on); b.textContent = on ? '★' : '☆'; b.setAttribute('aria-label', on ? 'Remove from favorites' : 'Add to favorites'); } });
     favCount();
     const req = on ? sb.from('favorites').insert({ email: ME, brand }) : sb.from('favorites').delete().eq('email', ME).eq('brand', brand);
@@ -261,13 +279,41 @@
     if (!$('p-fav').hidden) renderFavs();
   }
   function alertBar(t) { const m = $('count'); m.textContent = t; }
-  function renderFavs() {
-    const list = D.filter((d) => FAV.has(d.brand)).sort((a, b) => (b.earn || 0) - (a.earn || 0));
-    $('favEmpty').hidden = list.length > 0; $('favWrap').hidden = list.length === 0;
-    $('favHead').innerHTML = '<th class="starcell"></th>' + COLS.map(([k, l, num]) => `<th class="${num ? 'num' : ''}">${l}</th>`).join('');
-    $('favBody').innerHTML = list.map(rowHtml).join('');
+  function favVids() {
+    const BY = new Map(D.map((d) => [bkey(d.brand), d]));
+    return [...FAVV.values()].map((f) => { const a = f.a; const b = BY.get(bkey(a[1]));
+      const x = { id: a[0], brand: a[1], creator: a[2], user: a[3], thumb: a[4], video: a[5], cat: b ? b.cat : PRIVATE, earn: b ? b.earn : null, at: f.at };
+      x.rank = (TOPV.find((v) => v.id === x.id) || {}).rank; f.x = x; return x; });
   }
-  document.addEventListener('click', (e) => { const b = e.target.closest('button.star'); if (b) toggleFav(b.dataset.fav, b); });
+  function renderFavs() {
+    const q = $('favQ').value.trim().toLowerCase(), fb = $('favBrand').value, fn = $('favNiche').value, s = $('favSort').value;
+    const brands = D.filter((d) => FAV.has(d.brand)).map((d) => Object.assign(d, { at: SAVED.get(d.brand) || '' }));
+    const vids = favVids();
+    // dropdowns list every brand / niche in their favorites
+    const bset = new Map(), nset = new Map(), add = (m, k) => k && m.set(k, (m.get(k) || 0) + 1);
+    brands.forEach((d) => { add(bset, d.brand); d.cat.split(', ').forEach((c) => add(nset, c.trim())); });
+    vids.forEach((v) => { add(bset, v.brand); v.cat.split(', ').forEach((c) => add(nset, c.trim())); });
+    const fill = (id, m, all, keep) => { $(id).innerHTML = `<option value="">${all}</option>` + [...m.keys()].sort((a, b) => a.localeCompare(b)).map((k) => `<option value="${esc(k)}">${esc(k)}</option>`).join(''); $(id).value = m.has(keep) ? keep : ''; };
+    fill('favBrand', bset, 'All brands', fb); fill('favNiche', nset, 'All niches', fn);
+    const b = $('favBrand').value, c = $('favNiche').value;
+    const keep = (x) => (!q || (x.brand + ' ' + x.cat + ' ' + (x.user || '')).toLowerCase().includes(q)) && (!b || x.brand === b) && (!c || x.cat.split(', ').includes(c));
+    const by = { earn: (x, y) => (y.earn || 0) - (x.earn || 0) || x.brand.localeCompare(y.brand), brand: (x, y) => x.brand.localeCompare(y.brand),
+      niche: (x, y) => (x.cat || '~').localeCompare(y.cat || '~') || x.brand.localeCompare(y.brand), saved: (x, y) => String(y.at).localeCompare(String(x.at)) }[s];
+    const bl = brands.filter(keep).sort(by), vl = vids.filter(keep).sort(by);
+    $('favBCount').textContent = bl.length || ''; $('favVCount').textContent = vl.length || '';
+    $('favEmpty').hidden = bl.length > 0; $('favWrap').hidden = bl.length === 0;
+    $('favEmpty').textContent = brands.length ? 'No saved brands match those filters.' : 'No saved brands yet.';
+    $('favHead').innerHTML = '<th class="starcell"></th>' + COLS.map(([k, l, num]) => `<th class="${num ? 'num' : ''}">${l}</th>`).join('');
+    $('favBody').innerHTML = bl.map(rowHtml).join('');
+    $('favVEmpty').hidden = vl.length > 0;
+    $('favVEmpty').textContent = vids.length ? 'No saved videos match those filters.' : 'No saved videos yet. Open Top 100 Videos and tap ☆ Save under any video.';
+    $('favVGrid').innerHTML = vl.map((x) => vcardHtml(x, false)).join('');
+  }
+  ['favQ', 'favBrand', 'favNiche', 'favSort'].forEach((id) => $(id).addEventListener('input', renderFavs));
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('button.star'); if (b) toggleFav(b.dataset.fav, b);
+    const v = e.target.closest('button.vstar'); if (v) toggleVid(v.dataset.vid);
+  });
   ['q', 'cat', 'earnF', 'ttsF', 'noApps', 'noCap', 'inTop'].forEach((id) => $(id).addEventListener('input', () => { limit = 100; render(); }));
   $('moreBtn').onclick = () => { limit += 100; render(); };
 
@@ -304,6 +350,7 @@
 
   // ------------------------------------------------------------------ Top 100 videos
   // Snapshots live in site_meta: 'top_index' = {snaps:[{d:'YYYY-MM-DD', n}]}, 'top_YYYY-MM-DD' = {d, items:[[rank, id, brand, creator, username, thumb, video]]}
+  const PRIVATE = 'Private invite (suspected)';
   const bkey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const SNAP = {}; let TOPB = new Map(), topLimit = 24;
   const fmtDay = (d) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -347,7 +394,7 @@
       else byId.set(id, { rank: it[0], id, brand: it[2], creator: it[3], user: it[4], thumb: it[5], video: it[6], days: 1, first: d });
     }));
     const BY = new Map(D.map((d) => [bkey(d.brand), d]));
-    TOPV = [...byId.values()].map((x) => { const b = BY.get(bkey(x.brand)); return Object.assign(x, { cat: b ? b.cat : '', earn: b ? b.earn : null, key: (x.brand + ' ' + x.creator + ' ' + x.user).toLowerCase() }); });
+    TOPV = [...byId.values()].map((x) => { const b = BY.get(bkey(x.brand)); return Object.assign(x, { cat: b ? b.cat : PRIVATE, earn: b ? b.earn : null, key: (x.brand + ' ' + x.creator + ' ' + x.user).toLowerCase() }); });
     TOPV.total = days.length;
     const bs = $('topBrand'), kb = bs.value, cnt = new Map(); TOPV.forEach((x) => cnt.set(x.brand, (cnt.get(x.brand) || 0) + 1));
     bs.innerHTML = '<option value="">All brands</option>' + [...cnt.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([b, c]) => `<option value="${esc(b)}">${esc(b)} (${c})</option>`).join('');
@@ -363,16 +410,19 @@
     rows.sort(by);
     const month = $('topView').value.startsWith('m:');
     $('topCount').innerHTML = TOPV.length ? `Showing <b>${n(Math.min(topLimit, rows.length))}</b> of <b>${n(rows.length)}</b> videos${month ? ` from <b>${TOPV.total}</b> update${TOPV.total > 1 ? 's' : ''}` : ''}` : '';
-    $('topGrid').innerHTML = rows.slice(0, topLimit).map((x) => `<article class="vcard">
-      <div class="vwrap"><video controls playsinline preload="none" poster="${esc(x.thumb)}" src="${esc(x.video)}"></video><span class="vrank">#${x.rank}</span></div>
-      <div class="vmeta"><b>${esc(x.brand)}</b><span>@${esc(x.user || x.creator)}</span>
-      ${month ? `<span class="small">In Top 100 ${x.days} of ${TOPV.total} update${TOPV.total > 1 ? 's' : ''} · best #${x.rank}</span>` : ''}
-      ${x.cat ? `<span class="small">${esc(x.cat)}</span>` : ''}</div></article>`).join('') ||
+    $('topGrid').innerHTML = rows.slice(0, topLimit).map((x) => vcardHtml(x, month)).join('') ||
       `<p class="small">${TOPV.length ? 'No videos match those filters.' : 'The first Top 100 snapshot has not been saved yet. Check back after the next update.'}</p>`;
     $('topMore').hidden = rows.length <= topLimit;
   }
+  function vcardHtml(x, month) {
+    return `<article class="vcard">
+      <div class="vwrap"><video controls playsinline preload="none" poster="${esc(x.thumb)}" src="${esc(x.video)}"></video>${x.rank ? `<span class="vrank">#${x.rank}</span>` : ''}</div>
+      <div class="vmeta"><div class="vtop"><b>${esc(x.brand)}</b>${vStarHtml(x.id)}</div><span>@${esc(x.user || x.creator)}</span>
+      ${month ? `<span class="small">In Top 100 ${x.days} of ${TOPV.total} update${TOPV.total > 1 ? 's' : ''} · best #${x.rank}</span>` : ''}
+      ${x.cat ? `<span class="small">${esc(x.cat)}</span>` : ''}</div></article>`;
+  }
   // Only one video plays at a time
-  document.addEventListener('play', (e) => { document.querySelectorAll('#topGrid video').forEach((v) => { if (v !== e.target) v.pause(); }); }, true);
+  document.addEventListener('play', (e) => { document.querySelectorAll('.vgrid video').forEach((v) => { if (v !== e.target) v.pause(); }); }, true);
   let topReady = false;
   async function renderTop() {
     if (!topReady) { buildTopView(); topReady = true; await loadTopView(); }
@@ -403,7 +453,7 @@
     ['dir', 'picks', 'top', 'fav', 'new', 'help', 'admin'].forEach((t) => ($('p-' + t).hidden = t !== k));
     if (k === 'top') renderTop();
     if (k === 'admin') loadMembers();
-    if (k === 'fav') renderFavs();
+    if (k === 'fav') { renderFavs(); if (!topReady) { buildTopView(); topReady = true; loadTopView().then(renderFavs); } }
   }
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => selectTab(t.dataset.tab)));
 

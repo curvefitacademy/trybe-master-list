@@ -153,11 +153,24 @@
 
     <section id="p-fav" role="tabpanel" aria-labelledby="t-fav" hidden>
       <h1>Favorites</h1>
-      <p class="small" id="favEmpty">Tap the ☆ next to any brand in the Brand Directory to save it here. Your favorites stay saved to your account.</p>
+      <p class="small">Tap the ☆ next to any brand in the Brand Directory, or ☆ Save on any Top 100 video, to keep it here. Your favorites stay saved to your account.</p>
+      <div class="filters">
+        <div class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="favQ" type="search" placeholder="Search your favorites" aria-label="Search your favorites"></div>
+        <select id="favBrand" aria-label="Brand"><option value="">All brands</option></select>
+        <select id="favNiche" aria-label="Niche"><option value="">All niches</option></select>
+        <select id="favSort" aria-label="Sort">
+          <option value="earn">Sort: brand creator earnings</option><option value="brand">Sort: brand A–Z</option><option value="niche">Sort: niche A–Z</option><option value="saved">Sort: recently saved</option>
+        </select>
+      </div>
+      <h2 class="fav-h">Brands <span class="fav-count" id="favBCount"></span></h2>
+      <p class="small" id="favEmpty">No saved brands yet.</p>
       <div class="tablewrap" id="favWrap" hidden><table>
         <thead><tr id="favHead"></tr></thead>
         <tbody id="favBody"></tbody>
       </table></div>
+      <h2 class="fav-h">Videos <span class="fav-count" id="favVCount"></span></h2>
+      <p class="small" id="favVEmpty">No saved videos yet. Open Top 100 Videos and tap ☆ Save under any video.</p>
+      <div class="vgrid" id="favVGrid"></div>
     </section>
 
     <section id="p-new" role="tabpanel" aria-labelledby="t-new" hidden>

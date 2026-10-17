@@ -181,3 +181,8 @@ td.starcell,th.starcell{width:40px;padding-left:10px;padding-right:0}
 .vmeta b,.vmeta span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vmeta>span:not(.small){color:var(--muted);font-size:13px}
 .vmeta .small{white-space:normal}
+.fav-h{font-size:18px;margin:22px 0 8px;display:flex;align-items:center;gap:6px}
+.vtop{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0}
+.vtop b{min-width:0}
+.vstar{flex:none;background:var(--chip);border:0;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:700;color:var(--ink);cursor:pointer}
+.vstar[aria-pressed="true"]{background:var(--gold);color:var(--gold-ink)}
