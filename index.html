@@ -100,6 +100,7 @@
   <nav class="tabs" aria-label="Sections"><div class="tabs-in" role="tablist">
     <button class="tab" role="tab" aria-selected="true" data-tab="dir" id="t-dir">Brand Directory</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="picks" id="t-picks">Top Picks</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="top" id="t-top">Top 100 Videos</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="fav" id="t-fav">★ Favorites <span class="fav-count" id="favCount"></span></button>
     <button class="tab" role="tab" aria-selected="false" data-tab="new" id="t-new">What's New</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="help" id="t-help">How to Use</button>
@@ -118,6 +119,7 @@
         <label class="toggle"><input type="checkbox" id="ttsF"> On TikTok Shop</label>
         <label class="toggle"><input type="checkbox" id="noApps"> Hide apps</label>
         <label class="toggle"><input type="checkbox" id="noCap"> No per-video cap</label>
+        <label class="toggle"><input type="checkbox" id="inTop"> In Top 100</label>
       </div>
       <div class="toolbar"><div class="count" id="count" style="margin:0"></div><button class="btn ghost sm" type="button" id="csvBtn">Download this view (CSV)</button></div>
       <div class="tablewrap"><table aria-describedby="count">
@@ -130,6 +132,23 @@
     <section id="p-picks" role="tabpanel" aria-labelledby="t-picks" hidden>
       <h1>Top Picks</h1>
       <div class="picks" id="picks"></div>
+    </section>
+
+    <section id="p-top" role="tabpanel" aria-labelledby="t-top" hidden>
+      <h1>Trybe Top 100 Videos</h1>
+      <p class="small" id="topSub">The 100 best-performing creator videos on Trybe, saved every update so you can compare one month with the next. Shared with Trybe's permission.</p>
+      <div class="filters">
+        <select id="topView" aria-label="Which Top 100"></select>
+        <div class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="topQ" type="search" placeholder="Search brand or creator" aria-label="Search brand or creator"></div>
+        <select id="topBrand" aria-label="Brand"><option value="">All brands</option></select>
+        <select id="topNiche" aria-label="Niche"><option value="">All niches</option></select>
+        <select id="topSort" aria-label="Sort">
+          <option value="rank">Sort: best rank</option><option value="brand">Sort: brand A–Z</option><option value="days">Sort: most times in Top 100</option><option value="earn">Sort: brand creator earnings</option>
+        </select>
+      </div>
+      <div class="count" id="topCount"></div>
+      <div class="vgrid" id="topGrid"></div>
+      <div class="more"><button class="btn ghost" id="topMore" type="button" hidden>Show 24 more</button></div>
     </section>
 
     <section id="p-fav" role="tabpanel" aria-labelledby="t-fav" hidden>

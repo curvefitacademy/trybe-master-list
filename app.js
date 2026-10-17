@@ -134,13 +134,14 @@
   })();
 
   // ------------------------------------------------------------------ load data
-  let DATA = null, INFO = null, IS_ADMIN = false;
+  let DATA = null, INFO = null, IS_ADMIN = false, TOPIDX = { snaps: [] };
   async function enter(session) {
     entered = session.user.id;
     show('v-loading');
     const email = (session.user.email || '').toLowerCase();
-    const [meta, adm] = await Promise.all([
+    const [meta, topIdx, adm] = await Promise.all([
       sb.from('site_meta').select('key,value').eq('key', 'info'),
+      sb.from('site_meta').select('key,value').eq('key', 'top_index'),
       sb.from('admins').select('email').limit(1),
     ]);
     IS_ADMIN = !adm.error && adm.data && adm.data.length > 0;
@@ -160,7 +161,8 @@
       $('na-email').textContent = email; show('v-noaccess'); return;
     }
     INFO = rows.info || {};
-    await loadFavs(email);
+    TOPIDX = (topIdx && !topIdx.error && topIdx.data && topIdx.data[0] && topIdx.data[0].value) || { snaps: [] };
+    await Promise.all([loadFavs(email), loadLatestTop()]);
     setData(rows.brands);
     $('who').textContent = email;
     $('t-admin').hidden = !IS_ADMIN;
@@ -201,8 +203,8 @@
     $('head').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.k; if (k === sortKey) dir = -dir; else { sortKey = k; dir = COLS.find((c) => c[0] === k)[2] ? -1 : 1; } limit = 100; render(); }));
   }
   function filtered() {
-    const q = $('q').value.trim().toLowerCase(), c = $('cat').value, e = $('earnF').value, tt = $('ttsF').checked, na = $('noApps').checked, nc = $('noCap').checked;
-    return D.filter((d) => (!q || d.key.includes(q)) && (!c || d.cat.includes(c)) && (!tt || d.tts === 'Y') && (!na || d.tts !== 'A') && (!nc || !d.cap) &&
+    const q = $('q').value.trim().toLowerCase(), c = $('cat').value, e = $('earnF').value, tt = $('ttsF').checked, na = $('noApps').checked, nc = $('noCap').checked, it = $('inTop').checked;
+    return D.filter((d) => (!q || d.key.includes(q)) && (!c || d.cat.includes(c)) && (!tt || d.tts === 'Y') && (!na || d.tts !== 'A') && (!nc || !d.cap) && (!it || TOPB.has(bkey(d.brand))) &&
       (e === '' || (e === '0' ? !(d.earn > 0) : d.earn >= +e)));
   }
   function cmp(a, b) {
@@ -224,7 +226,7 @@
       const on = FAV.has(d.brand);
       return `<tr>
       <td class="starcell"><button type="button" class="star" data-fav="${esc(d.brand)}" aria-pressed="${on}" aria-label="${on ? 'Remove from favorites' : 'Add to favorites'}">${on ? '★' : '☆'}</button></td>
-      <td class="brand">${esc(d.brand)}${site ? `<a href="https://${esc(site)}" target="_blank" rel="noopener">${esc(site.replace(/^www\./, '').split('/')[0])}</a>` : ''}</td>
+      <td class="brand">${esc(d.brand)}${topBadge(d.brand)}${site ? `<a href="https://${esc(site)}" target="_blank" rel="noopener">${esc(site.replace(/^www\./, '').split('/')[0])}</a>` : ''}</td>
       <td><span class="pill p-${esc(d.tts)}">${TTS[d.tts] || 'Not verified'}</span></td>
       <td class="comm">${d.cap ? `<span class="cap">${esc(d.comm)}</span>` : esc(d.comm)}</td>
       <td class="num">${d.earn >= 100000 ? `<span class="big">${money(d.earn)}</span>` : d.earn > 0 ? money(d.earn) : '<span class="new">New</span>'}</td>
@@ -266,7 +268,7 @@
     $('favBody').innerHTML = list.map(rowHtml).join('');
   }
   document.addEventListener('click', (e) => { const b = e.target.closest('button.star'); if (b) toggleFav(b.dataset.fav, b); });
-  ['q', 'cat', 'earnF', 'ttsF', 'noApps', 'noCap'].forEach((id) => $(id).addEventListener('input', () => { limit = 100; render(); }));
+  ['q', 'cat', 'earnF', 'ttsF', 'noApps', 'noCap', 'inTop'].forEach((id) => $(id).addEventListener('input', () => { limit = 100; render(); }));
   $('moreBtn').onclick = () => { limit += 100; render(); };
 
   $('csvBtn').onclick = () => {
@@ -299,10 +301,107 @@
       `<h2>${esc(s.title)}</h2><ul class="wn-list">${(s.items || []).map((it) => `<li>${esc(it)}</li>`).join('') || '<li>None this week</li>'}</ul>`).join('');
   }
 
+
+  // ------------------------------------------------------------------ Top 100 videos
+  // Snapshots live in site_meta: 'top_index' = {snaps:[{d:'YYYY-MM-DD', n}]}, 'top_YYYY-MM-DD' = {d, items:[[rank, id, brand, creator, username, thumb, video]]}
+  const bkey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const SNAP = {}; let TOPB = new Map(), topLimit = 24;
+  const fmtDay = (d) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const fmtMonth = (m) => new Date(m + '-15T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const snaps = () => (TOPIDX.snaps || []).slice().sort((a, b) => b.d.localeCompare(a.d));
+  async function getSnaps(days) {
+    const need = days.filter((d) => !SNAP[d]);
+    if (need.length) {
+      const r = await sb.from('site_meta').select('key,value').in('key', need.map((d) => 'top_' + d));
+      (r.data || []).forEach((x) => { SNAP[x.key.slice(4)] = (x.value && x.value.items) || []; });
+    }
+    return days.map((d) => ({ d, items: SNAP[d] || [] }));
+  }
+  async function loadLatestTop() {
+    const s = snaps(); TOPB = new Map();
+    if (!s.length) return;
+    const [latest] = await getSnaps([s[0].d]);
+    latest.items.forEach((it) => { const k = bkey(it[2]); const b = TOPB.get(k) || { c: 0, best: 999 }; b.c++; b.best = Math.min(b.best, it[0]); TOPB.set(k, b); });
+  }
+  function topBadge(brand) {
+    const b = TOPB.get(bkey(brand)); if (!b) return '';
+    return `<span class="topbadge" title="In this week's Trybe Top 100">Top 100${b.c > 1 ? ' ×' + b.c : ''} · #${b.best}</span>`;
+  }
+  function buildTopView() {
+    const sel = $('topView'), keep = sel.value, s = snaps();
+    if (!s.length) { sel.innerHTML = '<option value="">No Top 100 saved yet</option>'; return; }
+    const months = [...new Set(s.map((x) => x.d.slice(0, 7)))];
+    sel.innerHTML = `<optgroup label="Single update">${s.map((x, i) => `<option value="d:${x.d}">${i === 0 ? 'Latest · ' : ''}${fmtDay(x.d)}</option>`).join('')}</optgroup>` +
+      `<optgroup label="Whole month (every update combined)">${months.map((m) => `<option value="m:${m}">${fmtMonth(m)}</option>`).join('')}</optgroup>`;
+    if (keep && [...sel.options].some((o) => o.value === keep)) sel.value = keep;
+  }
+  let TOPV = [];
+  async function loadTopView() {
+    const v = $('topView').value, s = snaps();
+    if (!v) { TOPV = []; return; }
+    const days = v.startsWith('m:') ? s.filter((x) => x.d.startsWith(v.slice(2))).map((x) => x.d) : [v.slice(2)];
+    const got = await getSnaps(days); const byId = new Map();
+    got.forEach(({ d, items }) => items.forEach((it) => {
+      const id = it[1] || it[6]; const e = byId.get(id);
+      if (e) { e.days++; if (it[0] < e.rank) e.rank = it[0]; if (d < e.first) e.first = d; }
+      else byId.set(id, { rank: it[0], id, brand: it[2], creator: it[3], user: it[4], thumb: it[5], video: it[6], days: 1, first: d });
+    }));
+    const BY = new Map(D.map((d) => [bkey(d.brand), d]));
+    TOPV = [...byId.values()].map((x) => { const b = BY.get(bkey(x.brand)); return Object.assign(x, { cat: b ? b.cat : '', earn: b ? b.earn : null, key: (x.brand + ' ' + x.creator + ' ' + x.user).toLowerCase() }); });
+    TOPV.total = days.length;
+    const bs = $('topBrand'), kb = bs.value, cnt = new Map(); TOPV.forEach((x) => cnt.set(x.brand, (cnt.get(x.brand) || 0) + 1));
+    bs.innerHTML = '<option value="">All brands</option>' + [...cnt.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([b, c]) => `<option value="${esc(b)}">${esc(b)} (${c})</option>`).join('');
+    bs.value = cnt.has(kb) ? kb : '';
+    const ns = $('topNiche'), kn = ns.value, nc = new Map(); TOPV.forEach((x) => x.cat.split(', ').forEach((c) => { c = c.trim(); if (c) nc.set(c, (nc.get(c) || 0) + 1); }));
+    ns.innerHTML = '<option value="">All niches</option>' + [...nc.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([c, k]) => `<option value="${esc(c)}">${esc(c)} (${k})</option>`).join('');
+    ns.value = nc.has(kn) ? kn : '';
+  }
+  function drawTop() {
+    const q = $('topQ').value.trim().toLowerCase(), b = $('topBrand').value, c = $('topNiche').value, s = $('topSort').value;
+    const rows = TOPV.filter((x) => (!q || x.key.includes(q)) && (!b || x.brand === b) && (!c || x.cat.split(', ').includes(c)));
+    const by = { rank: (x, y) => x.rank - y.rank, brand: (x, y) => x.brand.localeCompare(y.brand) || x.rank - y.rank, days: (x, y) => y.days - x.days || x.rank - y.rank, earn: (x, y) => (y.earn || 0) - (x.earn || 0) || x.rank - y.rank }[s];
+    rows.sort(by);
+    const month = $('topView').value.startsWith('m:');
+    $('topCount').innerHTML = TOPV.length ? `Showing <b>${n(Math.min(topLimit, rows.length))}</b> of <b>${n(rows.length)}</b> videos${month ? ` from <b>${TOPV.total}</b> update${TOPV.total > 1 ? 's' : ''}` : ''}` : '';
+    $('topGrid').innerHTML = rows.slice(0, topLimit).map((x) => `<article class="vcard">
+      <div class="vwrap"><video controls playsinline preload="none" poster="${esc(x.thumb)}" src="${esc(x.video)}"></video><span class="vrank">#${x.rank}</span></div>
+      <div class="vmeta"><b>${esc(x.brand)}</b><span>@${esc(x.user || x.creator)}</span>
+      ${month ? `<span class="small">In Top 100 ${x.days} of ${TOPV.total} update${TOPV.total > 1 ? 's' : ''} · best #${x.rank}</span>` : ''}
+      ${x.cat ? `<span class="small">${esc(x.cat)}</span>` : ''}</div></article>`).join('') ||
+      `<p class="small">${TOPV.length ? 'No videos match those filters.' : 'The first Top 100 snapshot has not been saved yet. Check back after the next update.'}</p>`;
+    $('topMore').hidden = rows.length <= topLimit;
+  }
+  // Only one video plays at a time
+  document.addEventListener('play', (e) => { document.querySelectorAll('#topGrid video').forEach((v) => { if (v !== e.target) v.pause(); }); }, true);
+  let topReady = false;
+  async function renderTop() {
+    if (!topReady) { buildTopView(); topReady = true; await loadTopView(); }
+    drawTop();
+  }
+  $('topView').addEventListener('change', async () => { topLimit = 24; await loadTopView(); drawTop(); });
+  ['topQ', 'topBrand', 'topNiche', 'topSort'].forEach((id) => $(id).addEventListener('input', () => { topLimit = 24; drawTop(); }));
+  $('topMore').addEventListener('click', () => { topLimit += 24; drawTop(); });
+
+  // Admin: save one Top 100 snapshot. items = [[rank, id, brand, creator, username, thumb, video], ...]
+  async function publishTop(items, day) {
+    day = day || new Date().toISOString().slice(0, 10);
+    const w = await sb.from('site_meta').upsert({ key: 'top_' + day, value: { d: day, items } }, { onConflict: 'key' });
+    if (w.error) return { error: w.error.message };
+    const cur = await sb.from('site_meta').select('value').eq('key', 'top_index');
+    const idx = (cur.data && cur.data[0] && cur.data[0].value) || { snaps: [] };
+    idx.snaps = (idx.snaps || []).filter((x) => x.d !== day).concat([{ d: day, n: items.length }]).sort((a, b) => a.d.localeCompare(b.d));
+    const w2 = await sb.from('site_meta').upsert({ key: 'top_index', value: idx }, { onConflict: 'key' });
+    if (w2.error) return { error: w2.error.message };
+    TOPIDX = idx; SNAP[day] = items; topReady = false; await loadLatestTop(); render();
+    return { ok: true, day, count: items.length, snaps: idx.snaps.length };
+  }
+  window.__tbmlPublishTop = (items, day) => (IS_ADMIN ? publishTop(items, day) : Promise.resolve({ error: 'not admin' }));
+
   // ------------------------------------------------------------------ tabs
   function selectTab(k) {
     document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', x.dataset.tab === k));
-    ['dir', 'picks', 'fav', 'new', 'help', 'admin'].forEach((t) => ($('p-' + t).hidden = t !== k));
+    ['dir', 'picks', 'top', 'fav', 'new', 'help', 'admin'].forEach((t) => ($('p-' + t).hidden = t !== k));
+    if (k === 'top') renderTop();
     if (k === 'admin') loadMembers();
     if (k === 'fav') renderFavs();
   }
