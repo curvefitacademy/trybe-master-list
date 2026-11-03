@@ -121,6 +121,7 @@
         <label class="toggle"><input type="checkbox" id="noApps"> Hide apps</label>
         <label class="toggle"><input type="checkbox" id="noCap"> No per-video cap</label>
         <label class="toggle"><input type="checkbox" id="inTop"> In Top 100</label>
+        <label class="toggle"><input type="checkbox" id="privF"> Private invite brands</label>
       </div>
       <div class="toolbar"><div class="count" id="count" style="margin:0"></div><button class="btn ghost sm" type="button" id="csvBtn">Download this view (CSV)</button></div>
       <div class="tablewrap"><table aria-describedby="count">
@@ -162,10 +163,11 @@
           <li>Open <a href="https://jointrybe.com/creator" target="_blank" rel="noopener">jointrybe.com</a> and log in like normal.</li>
           <li>Tap <b>Sync my Trybe invites</b> in your bookmarks bar. This page opens with all your invites.</li>
         </ol>
-        <p class="small">Your Trybe password never leaves Trybe. The button only reads your invite list from your own logged-in Trybe tab, and your invites are saved in this browser only, not on our servers. Tap it again any time to refresh. Works in Chrome, Safari, Edge and Firefox on a computer.</p>
+        <p class="small">Your Trybe password never leaves Trybe. The button only reads your invites from your own logged-in Trybe tab, and your invite list is saved in this browser only. For brands that aren't public on Trybe, it also looks up the brand's public stats (creator earnings, creator count, Trybe Score, commission) and adds them to the master list so every member can see them. Your own earnings, your name and the brands' messages to you are never shared. Tap it again any time to refresh. Works in Chrome, Safari, Edge and Firefox on a computer.</p>
       </div>
       <div id="invHas" hidden>
         <div class="toolbar"><div class="small" id="invSynced"></div><div class="row"><span class="small">To refresh, tap <b>Sync my Trybe invites</b> on Trybe again.</span><button class="linky danger" type="button" id="invClear">Remove my invites from this browser</button></div></div>
+        <div class="msg ok" id="invEnrich" hidden></div>
         <div class="stats" id="invStats"></div>
         <div class="filters">
           <div class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="invQ" type="search" placeholder="Search your invites" aria-label="Search your invites"></div>

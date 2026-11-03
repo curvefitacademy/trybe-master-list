@@ -135,6 +135,15 @@
 
   // ------------------------------------------------------------------ load data
   let DATA = null, INFO = null, IS_ADMIN = false, TOPIDX = { snaps: [] };
+  // Brands from members' private invites (added by the My Invites sync), stored as site_meta 'pb_<brand>'.
+  async function loadPrivateBrands() {
+    const out = [];
+    for (let f = 0; f < 20000; f += 1000) {
+      const r = await sb.from('site_meta').select('value').like('key', 'pb_%').range(f, f + 999);
+      if (r.error || !r.data) break; r.data.forEach((x) => x.value && Array.isArray(x.value.r) && out.push(x.value)); if (r.data.length < 1000) break;
+    }
+    return out;
+  }
   async function enter(session) {
     entered = session.user.id;
     show('v-loading');
@@ -154,6 +163,8 @@
       if (parts.error) { show('v-auth'); authMsg('err', 'Could not load the list: ' + parts.error.message); return; }
       const byKey = Object.fromEntries((parts.data || []).map((r) => [r.key, r.value]));
       rows.brands = keys.flatMap((k) => byKey[k] || []);
+      const nk = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); const have = new Set(rows.brands.map((r) => nk(r[0])));
+      (await loadPrivateBrands()).forEach((v) => { if (!have.has(nk(v.r[0]))) { have.add(nk(v.r[0])); rows.brands.push(v.r.slice(0, 12).concat([1, v.u || ''])); } });
       rows.info = info;
     }
     if (!rows.brands && !IS_ADMIN) {
@@ -179,7 +190,7 @@
     D = list.map((r, i) => {
       const epc = r[4] > 0 && r[5] > 0 ? r[4] / r[5] : null; const cm = (r[3] || '').toLowerCase();
       return { i, brand: r[0], tts: r[1] || 'U', cat: r[2] || '', comm: r[3] || '', earn: r[4], cr: r[5], epc, s30: r[6], sall: r[7], score: r[8], rating: r[9], rev: r[10], site: r[11] || '',
-        cap: cm.includes('max') && cm.includes('per submission'), key: (r[0] + ' ' + (r[2] || '')).toLowerCase() };
+        cap: cm.includes('max') && cm.includes('per submission'), key: (r[0] + ' ' + (r[2] || '')).toLowerCase(), priv: !!r[12], pbAt: r[13] || '' };
     });
     DATA = D; window.__tbmlD = D;
     $('updated').textContent = 'Updated weekly' + (INFO.updated_label ? ' · Last update: ' + INFO.updated_label : '');
@@ -203,8 +214,8 @@
     $('head').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.k; if (k === sortKey) dir = -dir; else { sortKey = k; dir = COLS.find((c) => c[0] === k)[2] ? -1 : 1; } limit = 100; render(); }));
   }
   function filtered() {
-    const q = $('q').value.trim().toLowerCase(), c = $('cat').value, e = $('earnF').value, tt = $('ttsF').checked, na = $('noApps').checked, nc = $('noCap').checked, it = $('inTop').checked;
-    return D.filter((d) => (!q || d.key.includes(q)) && (!c || d.cat.includes(c)) && (!tt || d.tts === 'Y') && (!na || d.tts !== 'A') && (!nc || !d.cap) && (!it || TOPB.has(bkey(d.brand))) &&
+    const q = $('q').value.trim().toLowerCase(), c = $('cat').value, e = $('earnF').value, tt = $('ttsF').checked, na = $('noApps').checked, nc = $('noCap').checked, it = $('inTop').checked, pv = $('privF').checked;
+    return D.filter((d) => (!q || d.key.includes(q)) && (!c || d.cat.includes(c)) && (!tt || d.tts === 'Y') && (!na || d.tts !== 'A') && (!nc || !d.cap) && (!it || TOPB.has(bkey(d.brand))) && (!pv || d.priv) &&
       (e === '' || (e === '0' ? !(d.earn > 0) : d.earn >= +e)));
   }
   function cmp(a, b) {
@@ -226,7 +237,7 @@
       const on = FAV.has(d.brand);
       return `<tr>
       <td class="starcell"><button type="button" class="star" data-fav="${esc(d.brand)}" aria-pressed="${on}" aria-label="${on ? 'Remove from favorites' : 'Add to favorites'}">${on ? '★' : '☆'}</button></td>
-      <td class="brand">${esc(d.brand)}${topBadge(d.brand)}${site ? `<a href="https://${esc(site)}" target="_blank" rel="noopener">${esc(site.replace(/^www\./, '').split('/')[0])}</a>` : ''}</td>
+      <td class="brand">${esc(d.brand)}${topBadge(d.brand)}${d.priv ? '<span class="privbadge" title="Not publicly listed in Trybe Discover. Added from members invites.">Private invite</span>' : ''}${site ? `<a href="https://${esc(site)}" target="_blank" rel="noopener">${esc(site.replace(/^www\./, '').split('/')[0])}</a>` : ''}</td>
       <td><span class="pill p-${esc(d.tts)}">${TTS[d.tts] || 'Not verified'}</span></td>
       <td class="comm">${d.cap ? `<span class="cap">${esc(d.comm)}</span>` : esc(d.comm)}</td>
       <td class="num">${d.earn >= 100000 ? `<span class="big">${money(d.earn)}</span>` : d.earn > 0 ? money(d.earn) : '<span class="new">New</span>'}</td>
@@ -314,7 +325,7 @@
     const b = e.target.closest('button.star'); if (b) toggleFav(b.dataset.fav, b);
     const v = e.target.closest('button.vstar'); if (v) toggleVid(v.dataset.vid);
   });
-  ['q', 'cat', 'earnF', 'ttsF', 'noApps', 'noCap', 'inTop'].forEach((id) => $(id).addEventListener('input', () => { limit = 100; render(); }));
+  ['q', 'cat', 'earnF', 'ttsF', 'noApps', 'noCap', 'inTop', 'privF'].forEach((id) => $(id).addEventListener('input', () => { limit = 100; render(); }));
   $('moreBtn').onclick = () => { limit += 100; render(); };
 
   $('csvBtn').onclick = () => {

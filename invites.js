@@ -21,8 +21,12 @@ if(!toks.length){alert('Please log in to Trybe first, then tap this bookmark aga
 const w=window.open(S+'/#invites','tbml_invites');if(!w){alert('Your browser blocked the window. Allow pop-ups for jointrybe.com and tap the bookmark again.');return}
 let inv=null,st=0;for(const t of toks){const r=await fetch('/backend/api/discovery/creators/me/invites',{headers:{authorization:'Bearer '+t}});st=r.status;if(r.ok){const j=await r.json();if(Array.isArray(j.data)){inv=j.data;break}}}
 if(!inv){alert('Could not read your Trybe invites (error '+st+'). Refresh Trybe, make sure you are logged in, and tap the bookmark again.');return}
-const out=inv.filter(x=>x.status==='PENDING').map(x=>({b:(x.brand&&x.brand.name)||'',c:(x.categories||[]).join(', '),r:((x.program&&x.program.rules)||[]).filter(z=>z.isActive!==false).map(z=>({t:z.type,v:z.value,d:z.displayText,cap:z.maxEarningsPerSubmission})),m:(x.message||'').slice(0,600),at:x.createdAt}));
-const msg={tbmlInvites:out,syncedAt:new Date().toISOString()};const h=e=>{if(e.origin!==S)return;if(e.data==='tbml-ready')w.postMessage(msg,S);if(e.data==='tbml-got')window.removeEventListener('message',h)};window.addEventListener('message',h)})();`;
+const out=inv.filter(x=>x.status==='PENDING').map(x=>({bi:x.brandId,pi:x.discoveryProfileId,b:(x.brand&&x.brand.name)||'',c:(x.categories||[]).join(', '),r:((x.program&&x.program.rules)||[]).filter(z=>z.isActive!==false).map(z=>({t:z.type,v:z.value,d:z.displayText,cap:z.maxEarningsPerSubmission})),m:(x.message||'').slice(0,600),at:x.createdAt}));
+const tok=toks[0];const eb=v=>{const m=String(v||'').match(/\\$([0-9.]+)\\s*([KM])/i);return m?Math.round(parseFloat(m[1])*(m[2].toUpperCase()==='M'?1e6:1e3)):0};
+let busy=false;const enrich=async(list)=>{if(busy)return;busy=true;let buf=[];for(let i=0;i<list.length;i++){if(w.closed)break;const[bi,pi]=list[i];let r;try{r=await fetch('/backend/api/discovery/brands/'+bi+'/profiles/'+pi+'?context=desktop',{headers:{authorization:'Bearer '+tok}})}catch(e){w.postMessage({tbmlProfilesErr:'network'},S);break}
+if(r.status===404){continue}if(!r.ok){w.postMessage({tbmlProfilesErr:r.status},S);break}const j=await r.json();const d=j&&j.data;if(d&&d.brand){buf.push({b:d.brand.name,c:(d.categories||[]).join(', '),comm:((d.program&&d.program.rules)||[]).map(z=>z.displayText).filter(Boolean).join('; '),earn:eb(d.creatorEarningsBucket),cr:d.creatorCount,s30:d.submissionCount30d,sall:d.submissionCountTotal,score:d.trybeScore&&d.trybeScore.score,rating:d.reviewRating,rev:d.reviewCount,site:d.brand.websiteUrl||''})}
+if(buf.length>=10||i===list.length-1){w.postMessage({tbmlProfiles:buf,done:i+1,total:list.length},S);buf=[]}await new Promise(z=>setTimeout(z,1500))}busy=false};
+const msg={tbmlInvites:out,syncedAt:new Date().toISOString()};const h=e=>{if(e.origin!==S)return;if(e.data==='tbml-ready')w.postMessage(msg,S);if(e.data&&Array.isArray(e.data.tbmlEnrich))enrich(e.data.tbmlEnrich.slice(0,400))};window.addEventListener('message',h)})();`;
 
   // ---------------------------------------------------------------- storage (this browser only)
   const me = () => window.__tbmlMe || '';
@@ -41,6 +45,7 @@ const msg={tbmlInvites:out,syncedAt:new Date().toISOString()};const h=e=>{if(e.o
     if (!Array.isArray(list)) return [];
     const s = (x, m) => String(x ?? '').slice(0, m);
     return list.slice(0, 3000).map((x) => ({
+      bi: /^[\w-]{8,64}$/.test(String(x && x.bi)) ? String(x.bi) : '', pi: /^[\w-]{8,64}$/.test(String(x && x.pi)) ? String(x.pi) : '',
       b: s(x && x.b, 120), c: s(x && x.c, 300), m: s(x && x.m, 600), at: s(x && x.at, 40),
       r: (Array.isArray(x && x.r) ? x.r : []).slice(0, 6).map((z) => ({ t: s(z && z.t, 40), v: s(z && z.v, 20), d: s(z && z.d, 200), cap: z && z.cap != null ? s(z.cap, 20) : null })),
     })).filter((x) => x.b);
@@ -60,8 +65,69 @@ const msg={tbmlInvites:out,syncedAt:new Date().toISOString()};const h=e=>{if(e.o
     got = true;
     try { e.source.postMessage('tbml-got', e.origin); } catch (err) {}
     save({ syncedAt: String(e.data.syncedAt || new Date().toISOString()).slice(0, 40), items: clean(e.data.tbmlInvites) });
-    whenReady(() => { const t = $('t-inv'); if (t) t.click(); render(); });
+    const src = e.source, org = e.origin;
+    whenReady(() => { const t = $('t-inv'); if (t) t.click(); render(); askEnrich(src, org); });
   });
+  window.addEventListener('message', (e) => {
+    if (!TRYBE.test(e.origin) || !e.data) return;
+    if (e.data.tbmlProfilesErr != null) { ENR.err = true; enrichMsg(); return; }
+    if (!Array.isArray(e.data.tbmlProfiles)) return;
+    ENR.done = Math.min(+e.data.done || 0, ENR.total); ENR.added += addProfiles(e.data.tbmlProfiles);
+    enrichMsg(); if (ENR.done >= ENR.total) { ENR.finished = true; enrichMsg(); render(); }
+  });
+
+  // ---------------------------------------------------------------- fill in private invite brands
+  const ENR = { total: 0, done: 0, added: 0, err: false, finished: false };
+  const STALE = 7 * 864e5;
+  function askEnrich(src, org) {
+    const data = load(); if (!data || !data.items) return;
+    const BY = new Map((window.__tbmlD || []).map((d) => [bkey(d.brand), d]));
+    const seen = new Set(), need = [];
+    data.items.forEach((x) => {
+      if (!x.bi || !x.pi || seen.has(x.bi)) return; seen.add(x.bi);
+      const d = BY.get(bkey(x.b));
+      if (!d || (d.priv && !(Date.now() - Date.parse(d.pbAt) < STALE))) need.push([x.bi, x.pi]);
+    });
+    if (!data.items.some((x) => x.bi)) { $('invEnrich').hidden = false; $('invEnrich').textContent = 'Drag the updated Sync button below to your bookmarks bar (replace the old one) so it can also fill in data for private invite brands.'; return; }
+    if (!need.length) return;
+    Object.assign(ENR, { total: Math.min(need.length, 400), done: 0, added: 0, err: false, finished: false });
+    enrichMsg();
+    try { src.postMessage({ tbmlEnrich: need.slice(0, 400) }, org); } catch (err) {}
+  }
+  function enrichMsg() {
+    const el = $('invEnrich'); if (!el || !ENR.total) return;
+    el.hidden = false;
+    const mins = Math.max(1, Math.round(((ENR.total - ENR.done) * 1.6) / 60));
+    el.textContent = ENR.err ? `Trybe stopped answering after ${ENR.done} of ${ENR.total} brands, so the rest will fill in next time you sync.`
+      : ENR.finished ? `Done: added data for ${ENR.added} private invite brands to the master list. Thanks for helping every member.`
+      : `Filling in data for ${ENR.total} brands that aren't public on Trybe: ${ENR.done} of ${ENR.total} done (about ${mins} min left). Keep your Trybe tab open.`;
+  }
+  function addProfiles(list) {
+    const D = window.__tbmlD; if (!D || !Array.isArray(list)) return 0;
+    const BY = new Map(D.map((d) => [bkey(d.brand), d])); const send = []; let added = 0;
+    const s = (x, m) => String(x ?? '').slice(0, m); const num = (v) => (v == null || v === '' || isNaN(+v) ? null : +v);
+    list.slice(0, 50).forEach((x) => {
+      const b = s(x && x.b, 120).trim(); if (!b) return;
+      const site = s(x.site, 200).replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+      const row = { b, c: s(x.c, 300), comm: s(x.comm, 300), earn: num(x.earn) || 0, cr: num(x.cr), s30: num(x.s30), sall: num(x.sall), score: num(x.score), rating: num(x.rating), rev: num(x.rev), site };
+      const cur = BY.get(bkey(b));
+      if (cur && !cur.priv) return; // already public in the master list
+      send.push(row);
+      const cm = row.comm.toLowerCase();
+      const obj = { i: cur ? cur.i : D.length, brand: b, tts: cur ? cur.tts : 'U', cat: row.c, comm: row.comm, earn: row.earn, cr: row.cr, epc: row.earn > 0 && row.cr > 0 ? row.earn / row.cr : null,
+        s30: row.s30, sall: row.sall, score: row.score, rating: row.rating, rev: row.rev, site, cap: cm.includes('max') && cm.includes('per submission'), key: (b + ' ' + row.c).toLowerCase(), priv: true, pbAt: new Date().toISOString() };
+      if (cur) Object.assign(cur, obj); else { D.push(obj); added++; }
+    });
+    if (send.length) contribute(send);
+    return added;
+  }
+  async function contribute(rows) {
+    try {
+      const k = Object.keys(localStorage).find((x) => /^sb-.*-auth-token$/.test(x)); const tok = k && JSON.parse(localStorage.getItem(k)).access_token;
+      if (!tok) return;
+      await fetch('/api/contribute-brands', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok }, body: JSON.stringify({ brands: rows }) });
+    } catch (err) {}
+  }
   function whenReady(fn) {
     const ok = () => window.__tbmlD && $('v-app') && !$('v-app').hidden;
     if (ok()) return fn();
@@ -82,7 +148,7 @@ const msg={tbmlInvites:out,syncedAt:new Date().toISOString()};const h=e=>{if(e.o
         pay: x.r.map((z) => z.d).filter(Boolean).join('; ') || (d ? d.comm : ''),
         type: TYPES[r0.t] || 'Other', rate: r0.v != null && r0.v !== '' ? +r0.v : null, pct,
         cap: caps.length ? Math.max(...caps) : null,
-        priv: !d, earn: d ? d.earn : null, cr: d ? d.cr : null, epc: d ? d.epc : null, score: d ? d.score : null,
+        priv: !d || !!d.priv, nodata: !d, earn: d ? d.earn : null, cr: d ? d.cr : null, epc: d ? d.epc : null, score: d ? d.score : null,
         tts: d ? d.tts : null, s30: d ? d.s30 : null,
         key: (x.b + ' ' + x.c + ' ' + x.m).toLowerCase(),
       };
@@ -105,7 +171,7 @@ const msg={tbmlInvites:out,syncedAt:new Date().toISOString()};const h=e=>{if(e.o
     R = rows(data);
     $('invSynced').textContent = `Last synced ${fmtDate(data.syncedAt)} · ${n(R.length)} open invites`;
     const priv = R.filter((r) => r.priv).length, paying = R.filter((r) => r.earn >= 10000).length, shop = R.filter((r) => r.tts === 'Y').length, nocap = R.filter((r) => !r.cap).length;
-    $('invStats').innerHTML = [[n(R.length), 'open invites'], [n(paying), 'brands that paid creators $10K+'], [n(shop), 'confirmed on TikTok Shop'], [n(priv), 'private invites (not in Discover)'], [n(nocap), 'with no per-video cap']]
+    $('invStats').innerHTML = [[n(R.length), 'open invites'], [n(paying), 'brands that paid creators $10K+'], [n(shop), 'confirmed on TikTok Shop'], [n(priv), 'private invites (not public on Trybe)'], [n(nocap), 'with no per-video cap']]
       .map(([b, s]) => `<div class="stat"><b>${b}</b><span>${s}</span></div>`).join('');
     const sel = $('invCat'), keep = sel.value, cats = new Map();
     R.forEach((r) => r.cat.split(', ').forEach((c) => { c = c.trim(); if (c) cats.set(c, (cats.get(c) || 0) + 1); }));
@@ -136,12 +202,12 @@ const msg={tbmlInvites:out,syncedAt:new Date().toISOString()};const h=e=>{if(e.o
     $('invBody').innerHTML = list.slice(0, limit).map((r) => {
       const on = FAV.has(r.brand);
       return `<tr>
-      <td class="starcell">${r.priv ? '' : `<button type="button" class="star" data-fav="${esc(r.brand)}" aria-pressed="${on}" aria-label="${on ? 'Remove from favorites' : 'Add to favorites'}">${on ? '★' : '☆'}</button>`}</td>
+      <td class="starcell">${r.nodata ? '' : `<button type="button" class="star" data-fav="${esc(r.brand)}" aria-pressed="${on}" aria-label="${on ? 'Remove from favorites' : 'Add to favorites'}">${on ? '★' : '☆'}</button>`}</td>
       <td class="cmpcell"><input type="checkbox" class="invcmp" data-i="${r.i}" ${CMP.has(r.i) ? 'checked' : ''} aria-label="Compare ${esc(r.brand)}"></td>
       <td class="brand">${esc(r.brand)}${r.priv ? '<span class="privbadge" title="Not publicly listed in Trybe Discover">Private invite</span>' : ''}</td>
       <td class="comm">${r.cap ? `<span class="cap">${esc(r.pay)}</span>` : esc(r.pay)}</td>
       <td class="num">${r.cap ? '$' + n(r.cap) : '<span class="nocap">No cap</span>'}</td>
-      <td class="num">${r.earn >= 100000 ? `<span class="big">${money(r.earn)}</span>` : r.earn > 0 ? money(r.earn) : r.priv ? dash : '<span class="new">New</span>'}</td>
+      <td class="num">${r.earn >= 100000 ? `<span class="big">${money(r.earn)}</span>` : r.earn > 0 ? money(r.earn) : r.nodata ? dash : '<span class="new">New</span>'}</td>
       <td class="num">${r.cr ? n(r.cr) : dash}</td>
       <td class="num">${r.epc ? '$' + n(Math.round(r.epc)) : dash}</td>
       <td class="num">${r.score != null && r.score !== '' ? `<span class="score ${scoreCls(r.score)}">${r.score}</span>` : dash}</td>
@@ -171,7 +237,7 @@ const msg={tbmlInvites:out,syncedAt:new Date().toISOString()};const h=e=>{if(e.o
         <dt>Pay</dt><dd>${hl(sameType && r.rate === bRate, esc(r.pay))}</dd>
         <dt>Pay type</dt><dd>${esc(r.type)}</dd>
         <dt>Cap per video</dt><dd>${r.cap ? '$' + n(r.cap) : '<span class="win">No cap</span>'}</dd>
-        <dt>Creator earnings</dt><dd>${r.earn > 0 ? hl(r.earn === bEarn, money(r.earn)) : r.priv ? 'Not public' : 'New program'}</dd>
+        <dt>Creator earnings</dt><dd>${r.earn > 0 ? hl(r.earn === bEarn, money(r.earn)) : r.nodata ? 'Not available yet' : 'New program'}</dd>
         <dt>Creators</dt><dd>${r.cr ? hl(r.cr === bCr, n(r.cr) + (r.cr === bCr ? ' (least competition)' : '')) : '—'}</dd>
         <dt>Earnings / creator</dt><dd>${r.epc ? hl(r.epc === bEpc, '$' + n(Math.round(r.epc))) : '—'}</dd>
         <dt>Trybe Score</dt><dd>${r.score != null && r.score !== '' ? hl(r.score === bScore, String(r.score)) : '—'}</dd>
