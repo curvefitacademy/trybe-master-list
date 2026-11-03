@@ -181,7 +181,7 @@
       return { i, brand: r[0], tts: r[1] || 'U', cat: r[2] || '', comm: r[3] || '', earn: r[4], cr: r[5], epc, s30: r[6], sall: r[7], score: r[8], rating: r[9], rev: r[10], site: r[11] || '',
         cap: cm.includes('max') && cm.includes('per submission'), key: (r[0] + ' ' + (r[2] || '')).toLowerCase() };
     });
-    DATA = D;
+    DATA = D; window.__tbmlD = D;
     $('updated').textContent = 'Updated weekly' + (INFO.updated_label ? ' · Last update: ' + INFO.updated_label : '');
     buildCats(); stats(); render(); picks(); whatsNew();
   }
@@ -242,7 +242,7 @@
   // Brand favorites are stored by brand name. Video favorites share the same table: brand = 'v:' + JSON [id, brand, creator, username, thumb, video].
   let FAV = new Set(), FAVV = new Map(), SAVED = new Map(), ME = '';
   async function loadFavs(email) {
-    ME = email; FAV = new Set(); FAVV = new Map(); SAVED = new Map();
+    ME = email; FAV = new Set(); FAVV = new Map(); SAVED = new Map(); window.__tbmlMe = email;
     const { data, error } = await sb.from('favorites').select('brand,created_at');
     if (!error && data) data.forEach((r) => {
       if (r.brand.startsWith('v:')) { try { const a = JSON.parse(r.brand.slice(2)); FAVV.set(a[0], { raw: r.brand, a, at: r.created_at || '' }); } catch (e) {} }
@@ -250,7 +250,7 @@
     });
     favCount();
   }
-  function favCount() { const t = FAV.size + FAVV.size; $('favCount').textContent = t ? t : ''; }
+  function favCount() { window.__tbmlFAV = FAV; const t = FAV.size + FAVV.size; $('favCount').textContent = t ? t : ''; }
   const vRaw = (x) => 'v:' + JSON.stringify([x.id, x.brand, x.creator, x.user, x.thumb, x.video]);
   function vStarHtml(id) { const on = FAVV.has(id); return `<button type="button" class="vstar" data-vid="${esc(id)}" aria-pressed="${on}">${on ? '★ Saved' : '☆ Save'}</button>`; }
   async function toggleVid(id) {
@@ -450,7 +450,8 @@
   // ------------------------------------------------------------------ tabs
   function selectTab(k) {
     document.querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', x.dataset.tab === k));
-    ['dir', 'picks', 'top', 'fav', 'new', 'help', 'admin'].forEach((t) => ($('p-' + t).hidden = t !== k));
+    ['dir', 'picks', 'top', 'inv', 'fav', 'new', 'help', 'admin'].forEach((t) => ($('p-' + t).hidden = t !== k));
+    if (k === 'inv' && window.__tbmlInv) window.__tbmlInv.render();
     if (k === 'top') renderTop();
     if (k === 'admin') loadMembers();
     if (k === 'fav') { renderFavs(); if (!topReady) { buildTopView(); topReady = true; loadTopView().then(renderFavs); } }

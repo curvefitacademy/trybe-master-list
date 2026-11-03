@@ -101,6 +101,7 @@
     <button class="tab" role="tab" aria-selected="true" data-tab="dir" id="t-dir">Brand Directory</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="picks" id="t-picks">Top Picks</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="top" id="t-top">Top 100 Videos</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="inv" id="t-inv">My Invites</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="fav" id="t-fav">★ Favorites <span class="fav-count" id="favCount"></span></button>
     <button class="tab" role="tab" aria-selected="false" data-tab="new" id="t-new">What's New</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="help" id="t-help">How to Use</button>
@@ -149,6 +150,41 @@
       <div class="count" id="topCount"></div>
       <div class="vgrid" id="topGrid"></div>
       <div class="more"><button class="btn ghost" id="topMore" type="button" hidden>Show 24 more</button></div>
+    </section>
+
+    <section id="p-inv" role="tabpanel" aria-labelledby="t-inv" hidden>
+      <h1>My Brand Invites</h1>
+      <div id="invEmpty" class="note inv-setup">
+        <p><b>See every brand that has invited you on Trybe, ranked and side by side with the master list data.</b> Connecting takes about a minute, once, on a computer.</p>
+        <ol>
+          <li>Drag this button to your bookmarks bar: <a id="invBm" class="bmbtn" href="#">Sync my Trybe invites</a>
+            <span class="small" id="invBmTip" hidden>Drag it, don't click it. If you can't see your bookmarks bar, press ⌘+Shift+B on Mac or Ctrl+Shift+B on Windows.</span></li>
+          <li>Open <a href="https://jointrybe.com/creator" target="_blank" rel="noopener">jointrybe.com</a> and log in like normal.</li>
+          <li>Tap <b>Sync my Trybe invites</b> in your bookmarks bar. This page opens with all your invites.</li>
+        </ol>
+        <p class="small">Your Trybe password never leaves Trybe. The button only reads your invite list from your own logged-in Trybe tab, and your invites are saved in this browser only, not on our servers. Tap it again any time to refresh. Works in Chrome, Safari, Edge and Firefox on a computer.</p>
+      </div>
+      <div id="invHas" hidden>
+        <div class="toolbar"><div class="small" id="invSynced"></div><div class="row"><span class="small">To refresh, tap <b>Sync my Trybe invites</b> on Trybe again.</span><button class="linky danger" type="button" id="invClear">Remove my invites from this browser</button></div></div>
+        <div class="stats" id="invStats"></div>
+        <div class="filters">
+          <div class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="invQ" type="search" placeholder="Search your invites" aria-label="Search your invites"></div>
+          <select id="invCat" aria-label="Niche"><option value="">All niches</option></select>
+          <select id="invType" aria-label="Pay type"><option value="">Any pay type</option><option>% of sales (GMV)</option><option>% of ad spend</option><option>$ per video</option><option>$ per order</option></select>
+          <label class="toggle"><input type="checkbox" id="invPaid"> Already paying creators</label>
+          <label class="toggle"><input type="checkbox" id="invShop"> On TikTok Shop</label>
+          <label class="toggle"><input type="checkbox" id="invNoCap"> No per-video cap</label>
+          <label class="toggle"><input type="checkbox" id="invPriv"> Private invites only</label>
+        </div>
+        <div class="cmpbar" id="invCmpBar" hidden><span><b id="invCmpN">0</b> selected to compare (up to 4)</span><button class="btn sm" type="button" id="invCmpGo">See comparison</button><button class="linky" type="button" id="invCmpClear">Clear</button><span class="small" id="invCmpMsg" hidden>You can compare up to 4 at a time.</span></div>
+        <div class="cmpgrid" id="invCmp" hidden></div>
+        <div class="count" id="invCount"></div>
+        <div class="tablewrap"><table aria-describedby="invCount">
+          <thead><tr id="invHead"></tr></thead>
+          <tbody id="invBody"></tbody>
+        </table></div>
+        <div class="more"><button class="btn ghost" id="invMore" type="button" hidden>Show 100 more</button></div>
+      </div>
     </section>
 
     <section id="p-fav" role="tabpanel" aria-labelledby="t-fav" hidden>
@@ -237,5 +273,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
+<script src="invites.js"></script>
 </body>
 </html>
