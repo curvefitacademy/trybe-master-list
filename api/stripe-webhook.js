@@ -1,4 +1,6 @@
-// Stripe -> member list. Gives buyers access when they pay and removes it when they cancel.
+// Stripe -> member list. Gives buyers access when they pay.
+// Since Nov 2026 the list is a $29 one-time payment for lifetime access, so ending an old
+// monthly subscription no longer removes access (LIFETIME below). Remove members by hand in Admin.
 // Needs these Vercel environment variables:
 //   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SUPABASE_URL, SUPABASE_SECRET_KEY
 const Stripe = require('stripe');
@@ -56,6 +58,7 @@ async function setStatusForCustomer(stripe, customerId, status) {
 
 const ACTIVE = new Set(['active', 'trialing', 'past_due']); // past_due: Stripe is still retrying the card
 const ENDED = new Set(['canceled', 'unpaid', 'incomplete_expired', 'paused']);
+const LIFETIME = true;
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') { res.status(405).send('Method not allowed'); return; }
@@ -80,7 +83,7 @@ module.exports = async (req, res) => {
       case 'customer.subscription.deleted': {
         const s = event.type === 'customer.subscription.deleted' ? 'canceled' : o.status;
         if (ACTIVE.has(s)) await setStatusForCustomer(stripe, o.customer, 'active');
-        else if (ENDED.has(s)) await setStatusForCustomer(stripe, o.customer, 'canceled');
+        else if (ENDED.has(s) && !LIFETIME) await setStatusForCustomer(stripe, o.customer, 'canceled');
         break;
       }
       case 'invoice.paid': {
