@@ -215,8 +215,8 @@
     $('head').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.k; if (k === sortKey) dir = -dir; else { sortKey = k; dir = COLS.find((c) => c[0] === k)[2] ? -1 : 1; } limit = 100; render(); }));
   }
   function filtered() {
-    const q = $('q').value.trim().toLowerCase(), c = $('cat').value, e = $('earnF').value, tt = $('ttsF').checked, na = $('noApps').checked, nc = $('noCap').checked, it = $('inTop').checked, pv = $('privF').checked;
-    return D.filter((d) => (!q || d.key.includes(q)) && (!c || d.cat.includes(c)) && (!tt || d.tts === 'Y') && (!na || d.tts !== 'A') && (!nc || !d.cap) && (!it || TOPB.has(bkey(d.brand))) && (!pv || d.priv) &&
+    const q = $('q').value.trim().toLowerCase(), c = $('cat').value, e = $('earnF').value, tt = $('ttsF').checked, na = $('noApps').checked, nc = $('noCap').checked, it = $('inTop').checked, pv = $('privF').checked, gf = $('growF').checked;
+    return D.filter((d) => (!q || d.key.includes(q)) && (!c || d.cat.includes(c)) && (!tt || d.tts === 'Y') && (!na || d.tts !== 'A') && (!nc || !d.cap) && (!it || TOPB.has(bkey(d.brand))) && (!pv || d.priv) && (!gf || growOf(d) > 0) &&
       (e === '' || (e === '0' ? !(d.earn > 0) : d.earn >= +e)));
   }
   function cmp(a, b) {
@@ -228,6 +228,13 @@
   // Mini creator-earnings growth charts. site_meta 'hist' = {d:[dates], e:{brandkey:[earn per date or null]}}
   const hkey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const fmtShort = (d) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  // Growth since the first recorded week (0 when flat, new or unknown). Used by the 'Growing fastest' filter.
+  function growOf(d) {
+    if (d.__g !== undefined) return d.__g;
+    const H = window.__tbmlHist, v = H && H.e && H.e[hkey(d.brand)]; let g = 0;
+    if (v) { const p = v.filter((x) => x > 0); if (p.length >= 2 && p[p.length - 1] > p[0]) g = (p[p.length - 1] - p[0]) / p[0]; }
+    return (d.__g = g);
+  }
   function sparkHtml(brand) {
     const H = window.__tbmlHist; if (!H || !H.e) return '';
     const v = H.e[hkey(brand)]; if (!v) return '';
@@ -258,7 +265,7 @@
   const dash = '<span class="dash">—</span>';
   function render() {
     head();
-    const rows = filtered().sort(cmp);
+    const rows = filtered().sort($('growF').checked ? (a, b) => growOf(b) - growOf(a) || (b.earn || 0) - (a.earn || 0) : cmp);
     $('count').innerHTML = `Showing <b>${n(Math.min(limit, rows.length))}</b> of <b>${n(rows.length)}</b> brands`;
     $('body').innerHTML = rows.slice(0, limit).map(rowHtml).join('') || `<tr><td colspan="11" style="padding:28px;text-align:center;color:var(--muted)">No brands match those filters.</td></tr>`;
     $('moreBtn').hidden = rows.length <= limit;
@@ -356,11 +363,11 @@
     const b = e.target.closest('button.star'); if (b) toggleFav(b.dataset.fav, b);
     const v = e.target.closest('button.vstar'); if (v) toggleVid(v.dataset.vid);
   });
-  ['q', 'cat', 'earnF', 'ttsF', 'noApps', 'noCap', 'inTop', 'privF'].forEach((id) => $(id).addEventListener('input', () => { limit = 100; render(); }));
+  ['q', 'cat', 'earnF', 'ttsF', 'noApps', 'noCap', 'inTop', 'privF', 'growF'].forEach((id) => $(id).addEventListener('input', () => { limit = 100; render(); }));
   $('moreBtn').onclick = () => { limit += 100; render(); };
 
   $('csvBtn').onclick = () => {
-    const rows = filtered().sort(cmp);
+    const rows = filtered().sort($('growF').checked ? (a, b) => growOf(b) - growOf(a) || (b.earn || 0) - (a.earn || 0) : cmp);
     const q = (v) => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     const lines = [['Brand', 'On TikTok Shop', 'Commission', 'Creator Earnings ($)', 'Total Creators', 'Earnings per Creator ($)', 'Submissions (30 days)', 'Submissions (all time)', 'Trybe Score', 'Rating', 'Reviews', 'Categories', 'Website'].join(',')];
     rows.forEach((d) => lines.push([d.brand, TTS[d.tts], d.comm, d.earn > 0 ? d.earn : 'New', d.cr, d.epc ? Math.round(d.epc) : '', d.s30, d.sall, d.score, d.rating, d.rev, d.cat, d.site].map(q).join(',')));
