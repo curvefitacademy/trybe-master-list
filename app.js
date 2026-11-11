@@ -173,6 +173,7 @@
     }
     INFO = rows.info || {};
     TOPIDX = (topIdx && !topIdx.error && topIdx.data && topIdx.data[0] && topIdx.data[0].value) || { snaps: [] };
+    try { const hq = await sb.from('site_meta').select('value').eq('key', 'hist'); window.__tbmlHist = (hq.data && hq.data[0] && hq.data[0].value) || null; } catch (e) {}
     await Promise.all([loadFavs(email), loadLatestTop()]);
     setData(rows.brands);
     $('who').textContent = email;
@@ -224,6 +225,36 @@
     if (typeof x === 'string') return dir * x.localeCompare(y); return dir * (x - y) || a.i - b.i;
   }
   const scoreCls = (s) => (s >= 80 ? 's-hi' : s < 40 ? 's-lo' : 's-mid');
+  // Mini creator-earnings growth charts. site_meta 'hist' = {d:[dates], e:{brandkey:[earn per date or null]}}
+  const hkey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const fmtShort = (d) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  function sparkHtml(brand) {
+    const H = window.__tbmlHist; if (!H || !H.e) return '';
+    const v = H.e[hkey(brand)]; if (!v) return '';
+    const pts = v.map((x, i) => [i, x]).filter((p) => p[1] != null && p[1] > 0);
+    if (pts.length < 2) return '';
+    const first = pts[0][1], last = pts[pts.length - 1][1]; if (last <= first) return '';
+    const W = 54, Hh = 18, n = v.length - 1 || 1, max = Math.max(...pts.map((p) => p[1])), min = Math.min(...pts.map((p) => p[1]));
+    const xy = pts.map(([i, x]) => [2 + (i / n) * (W - 4), Hh - 2 - (max === min ? 0.5 : (x - min) / (max - min)) * (Hh - 4)]);
+    const pct = Math.round(((last - first) / first) * 100);
+    const tip = pts.map(([i, x]) => fmtShort(H.d[i]) + ': ' + money(x)).join(' → ');
+    return `<span class="spark" title="${esc(tip)}"><svg viewBox="0 0 ${W} ${Hh}" width="${W}" height="${Hh}" aria-hidden="true"><polyline points="${xy.map((p) => p.map((c) => c.toFixed(1)).join(',')).join(' ')}" /><circle cx="${xy[xy.length - 1][0].toFixed(1)}" cy="${xy[xy.length - 1][1].toFixed(1)}" r="2" /></svg><b>+${pct}%</b></span>`;
+  }
+  async function appendHist(brands, info) {
+    const day = String((info && info.updated) || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const cur = await sb.from('site_meta').select('value').eq('key', 'hist');
+    const H = (cur.data && cur.data[0] && cur.data[0].value) || { d: [], e: {} };
+    let idx = H.d.indexOf(day);
+    if (idx < 0) { H.d.push(day); idx = H.d.length - 1; }
+    const now = {}; brands.forEach((r) => { if (r[4] > 0) now[hkey(r[0])] = r[4]; });
+    const keys = new Set([...Object.keys(H.e), ...Object.keys(now)]);
+    keys.forEach((k) => { const a = H.e[k] || []; while (a.length < H.d.length) a.push(null); a[idx] = now[k] || null; if (a.some((x) => x > 0)) H.e[k] = a; else delete H.e[k]; });
+    const w = await sb.from('site_meta').upsert({ key: 'hist', value: H }, { onConflict: 'key' });
+    if (!w.error) window.__tbmlHist = H;
+    return w.error ? { error: w.error.message } : { ok: true, dates: H.d.length, brands: Object.keys(H.e).length };
+  }
+  window.__tbmlAppendHist = (brands, info) => (IS_ADMIN ? appendHist(brands, info) : Promise.resolve({ error: 'not admin' }));
+
   const dash = '<span class="dash">—</span>';
   function render() {
     head();
@@ -240,7 +271,7 @@
       <td class="brand">${esc(d.brand)}${topBadge(d.brand)}${d.priv ? '<span class="privbadge" title="Not publicly listed in Trybe Discover. Added from members invites.">Private invite</span>' : ''}${site ? `<a href="https://${esc(site)}" target="_blank" rel="noopener">${esc(site.replace(/^www\./, '').split('/')[0])}</a>` : ''}</td>
       <td><span class="pill p-${esc(d.tts)}">${TTS[d.tts] || 'Not verified'}</span></td>
       <td class="comm">${d.cap ? `<span class="cap">${esc(d.comm)}</span>` : esc(d.comm)}</td>
-      <td class="num">${d.earn >= 100000 ? `<span class="big">${money(d.earn)}</span>` : d.earn > 0 ? money(d.earn) : '<span class="new">New</span>'}</td>
+      <td class="num">${d.earn >= 100000 ? `<span class="big">${money(d.earn)}</span>` : d.earn > 0 ? money(d.earn) : '<span class="new">New</span>'}${sparkHtml(d.brand)}</td>
       <td class="num">${d.cr ? n(d.cr) : dash}</td>
       <td class="num">${d.epc ? '$' + n(Math.round(d.epc)) : dash}</td>
       <td class="num">${d.s30 != null ? n(d.s30) : dash}</td>
@@ -474,6 +505,11 @@
 
   // Saves the list in ~100 KB parts, then switches members over to the new version in one step.
   async function publishBrands(brands, info, progress) {
+    const res = await publishBrandsInner(brands, info, progress);
+    if (res && !res.error) { try { res.hist = await appendHist(brands, info); } catch (e) { res.hist = { error: String(e.message || e) }; } }
+    return res;
+  }
+  async function publishBrandsInner(brands, info, progress) {
     const PART = 600, version = Date.now().toString(36), parts = Math.ceil(brands.length / PART);
     for (let i = 0; i < parts; i++) {
       if (progress) progress(i + 1, parts);
