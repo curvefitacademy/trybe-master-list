@@ -428,14 +428,15 @@
     if (!s.length) { sel.innerHTML = '<option value="">No Top 100 saved yet</option>'; return; }
     const months = [...new Set(s.map((x) => x.d.slice(0, 7)))];
     sel.innerHTML = `<optgroup label="Single update">${s.map((x, i) => `<option value="d:${x.d}">${i === 0 ? 'Latest · ' : ''}${fmtDay(x.d)}</option>`).join('')}</optgroup>` +
-      `<optgroup label="Whole month (every update combined)">${months.map((m) => `<option value="m:${m}">${fmtMonth(m)}</option>`).join('')}</optgroup>`;
+      `<optgroup label="Whole month (every update combined)">${months.map((m) => `<option value="m:${m}">${fmtMonth(m)}</option>`).join('')}</optgroup>` +
+      `<optgroup label="All time"><option value="all">Every video ever in the Top 100 (${s.length} updates)</option></optgroup>`;
     if (keep && [...sel.options].some((o) => o.value === keep)) sel.value = keep;
   }
   let TOPV = [];
   async function loadTopView() {
     const v = $('topView').value, s = snaps();
     if (!v) { TOPV = []; return; }
-    const days = v.startsWith('m:') ? s.filter((x) => x.d.startsWith(v.slice(2))).map((x) => x.d) : [v.slice(2)];
+    const days = v === 'all' ? s.map((x) => x.d) : v.startsWith('m:') ? s.filter((x) => x.d.startsWith(v.slice(2))).map((x) => x.d) : [v.slice(2)];
     const got = await getSnaps(days); const byId = new Map();
     got.forEach(({ d, items }) => items.forEach((it) => {
       const id = it[1] || it[6]; const e = byId.get(id);
@@ -457,7 +458,7 @@
     const rows = TOPV.filter((x) => (!q || x.key.includes(q)) && (!b || x.brand === b) && (!c || x.cat.split(', ').includes(c)));
     const by = { rank: (x, y) => x.rank - y.rank, brand: (x, y) => x.brand.localeCompare(y.brand) || x.rank - y.rank, days: (x, y) => y.days - x.days || x.rank - y.rank, earn: (x, y) => (y.earn || 0) - (x.earn || 0) || x.rank - y.rank }[s];
     rows.sort(by);
-    const month = $('topView').value.startsWith('m:');
+    const month = $('topView').value.startsWith('m:') || $('topView').value === 'all';
     $('topCount').innerHTML = TOPV.length ? `Showing <b>${n(Math.min(topLimit, rows.length))}</b> of <b>${n(rows.length)}</b> videos${month ? ` from <b>${TOPV.total}</b> update${TOPV.total > 1 ? 's' : ''}` : ''}` : '';
     $('topGrid').innerHTML = rows.slice(0, topLimit).map((x) => vcardHtml(x, month)).join('') ||
       `<p class="small">${TOPV.length ? 'No videos match those filters.' : 'The first Top 100 snapshot has not been saved yet. Check back after the next update.'}</p>`;
