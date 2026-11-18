@@ -294,10 +294,11 @@
     ME = email; FAV = new Set(); FAVV = new Map(); SAVED = new Map(); window.__tbmlMe = email;
     const { data, error } = await sb.from('favorites').select('brand,created_at');
     if (!error && data) data.forEach((r) => {
+      if (r.brand.startsWith('s:')) return;
       if (r.brand.startsWith('v:')) { try { const a = JSON.parse(r.brand.slice(2)); FAVV.set(a[0], { raw: r.brand, a, at: r.created_at || '' }); } catch (e) {} }
       else { FAV.add(r.brand); SAVED.set(r.brand, r.created_at || ''); }
     });
-    favCount();
+    favCount(); window.__tbmlSb = sb; document.dispatchEvent(new Event('tbml:favs'));
   }
   function favCount() { window.__tbmlFAV = FAV; const t = FAV.size + FAVV.size; $('favCount').textContent = t ? t : ''; }
   const vRaw = (x) => 'v:' + JSON.stringify([x.id, x.brand, x.creator, x.user, x.thumb, x.video]);
